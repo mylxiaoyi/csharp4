@@ -1,0 +1,803 @@
+Chapter 6. Framework Fundamentals
+=================================
+
+我们编程时所需要的许多核心功能并不是由C#语言提供的，而由.NET框架中的类型所提供的。在本章中，我们将会探讨框架在基本编程任务所扮演的角色，例如相等比较、顺序比较以及类型转换。同时我们会探讨基本框架类型，例如String，DateTime与Enum。
+
+本节中的类型位于System名字空间中，但以下是例外：
+
+-  StringBuilder定义在System.Text名字空间，与用于文本编码的类型位于相同的名字空间中。
+-  CultureInfo与相关联的类型位于System.Globalization名字空间中。
+-  XmlConver定义在System.Xml名字空间中。
+
+字符串与文本处理
+----------------
+
+字符
+~~~~
+
+C#
+char表示一个Unicode字符，且是System.Char结构的别名。在第2章中，我们描述了如何表示字符字面量。例如：
+
+.. code:: csharp
+
+    char c = 'A';
+    char newLine = '\n';
+
+System.Char为处理字符定义了大量的方法，例如ToUpper，ToLower与IsWhiteSpace。我们可以通过System.Char类型或是其char别名来调用这些方法：
+
+.. code:: csharp
+
+    Console.WriteLine (System.Char.ToUpper ('c'));    // C
+    Console.WriteLine (char.IsWhiteSpace ('\t'));     // True
+
+ToUpper与ToLower会考虑到终端用户的Locale，从而会导致一些莫名的Bug。下面的表达式在Turkey中会计算为false：
+
+char.ToUpper ('i') == 'I'
+
+因为在Turkey中，char.ToUpper('i')是'?'。为了避免这些问题，System.Char（与System.String）同时提供了以单词Invariant结尾的ToUpper与ToLower的文件无关版本。这些方法总是应用英语文化规则：
+
+Console.WriteLine (char.ToUpperInvariant ('i')); // I
+
+这是下列语句的简写形式：
+
+Console.WriteLine (char.ToUpper ('i', CultureInfo.InvariantCulture))
+
+char其他静态方法中的大多数与字符分类相关，如表6-1所示。
+
+|csharp\_table\_6\_1.png| |csharp\_table\_6\_1\_2.png|
+
+为了更多粒度的分类，char提供了名为GetUnicodeCategory的静态方法；这会返回一个UnicodeCategory枚举，其成员显示在表6-1的最右一列。
+
+char为16位宽－足够表示Basic Multilingual Plane中的任何Unicode字符。
+
+字符串
+~~~~~~
+
+C#
+string（System.String）是不可变（不可修改）的字符序列。在第2章中，我们描述了如何表未完字符串字面量，执行相等比较以及连接两个字符串。本节会探讨用于处理字符串的其他函数，这是通过System.String类的静态与实例成员来提供的。
+
+**构造字符串**
+
+构造字符串最简单的方法就是赋值一个字面量，正如我们在第2章中所看到的：
+
+.. code:: csharp
+
+    string s1 = "Hello";
+    string s2 = "First Line\r\nSecond Line";
+    string s3 = @"\\server\fileshare\helloworld.cs";
+
+要创建一个重复的字符序列，我们可以使用string的构造函数：
+
+Console.Write (new string ('\*', 10)); // \*\*\*\*\*\*\*\*\*\*
+
+我们也可以由char数组构造字符串。ToCharArray方法则执行相反的操作：
+
+.. code:: csharp
+
+    char[] ca = "Hello".ToCharArray();
+    string s = new string (ca);              // s = "Hello"
+
+为了由char\*这样的类型构造字符串，string的构造函数也被重载来接受各种（不安全）的指针类型。
+
+**null与空字符串**
+
+空字符串的长度为零。为了创建空字符串，我们可以使用字面量或是静态的string.Empty域；为了测试是否为空字符串，我们可以执行相等或是测试其Length属性：
+
+.. code:: csharp
+
+    string empty = "";
+    Console.WriteLine (empty == "");              // True
+    Console.WriteLine (empty == string.Empty);    // True
+    Console.WriteLine (empty.Length == 0);        // True
+
+由于字符串是引用类型，其也可以为null：
+
+.. code:: csharp
+
+    string nullString = null;
+    Console.WriteLine (nullString == null);        // True
+    Console.WriteLine (nullString == "");          // False
+    Console.WriteLine (nullString.Length == 0);    // NullReferenceException
+
+静态的string.IsNullOrEmpty方法是一个用于测试一个指定的字符串量澡为null或空的非常有用的简短方法。
+
+**访问字符串中的字符**
+
+字符串的索引器返回任意索引入的单个字符。类似于在字符串上操作的所有函数，这是由零开始索引的：
+
+.. code:: csharp
+
+    string str  = "abcde";
+    char letter = str[1];        // letter == 'b'
+
+string同时实现了IEnumerable接口，我们可以在其字符上执行foreach操作：
+
+foreach (char c in "123") Console.Write (c + ","); // 1,2,3,
+
+**在字符串内查找**
+
+用于在字符串内查找的最简单的方法是Contains，StartsWidth与EndsWith。这些方法都会返回true或是false：
+
+.. code:: csharp
+
+    Console.WriteLine ("quick brown fox".Contains ("brown"));    // True
+    Console.WriteLine ("quick brown fox".EndsWith ("fox"));      // True
+
+IndexOf更为强大：他会返回指定字符或指字子串的第一个位置（如果没有找到则返回-1）：
+
+Console.WriteLine ("abcde".IndexOf ("cd")); // 2
+
+IndexOf还被重载来接受一个startPosition（开始搜索处的索引）与一个StringComparison枚举。后者可以允许我们执行大小写无关的搜索：
+
+.. code:: csharp
+
+    Console.WriteLine ("abcde".IndexOf ("CD",
+                       StringComparison.CurrentCultureIgnoreCase));    // 2
+
+LastIndexOf类似于IndexOf，但是对字符串执行后向查找。
+
+IndexOfAny返回字符集合中任意一个匹配的第一个位置：
+
+.. code:: csharp
+
+    Console.Write ("ab,cd ef".IndexOfAny (new char[] {' ', ','} ));       // 2
+    Console.Write ("pas5w0rd".IndexOfAny ("0123456789".ToCharArray() ));  // 3
+
+LastIndexOfAny在相反的方向上执行相同的操作。
+
+**操作字符串**
+
+因为String是不可修改的，操作字符串的所有方法都会返回一个新字符串，而不会修改原字符串（当我们重新赋值一个字符串变量也是如此）。
+
+SubString获取字符串的一部分：
+
+.. code:: csharp
+
+    string left3 = "12345".Substring (0, 3);     // left3 = "123";
+    string mid3  = "12345".Substring (1, 3);     // mid3 = "234";
+
+如果我们忽略长度，我们就会获得字符串的其余部分：
+
+string end3 = "12345".Substring (2); // end3 = "345";
+
+Insert与Remove会在指定的位置处插入或是删除字符：
+
+.. code:: csharp
+
+    string s1 = "helloworld".Insert (5, ", ");    // s1 = "hello, world"
+    string s2 = s1.Remove (5, 2);                 // s2 = "helloworld";
+
+PadLeft与PadRight会使用指定的字符将字符串填充到指定的长度（如果没有指定填充字符则填充为空格）：
+
+.. code:: csharp
+
+    Console.WriteLine ("12345".PadLeft (9, '*'));  // ****12345
+    Console.WriteLine ("12345".PadLeft (9));       //     12345
+
+如果输入字符串比填充长度还要长，则会返回未修改的原始字符串。
+
+TrimStart与TrimEnd会由字符串的起始或结束处移除指定的字符；Trim则会同时进行两种操作。默认情况，这些函数会移除空白字符（包括空格、Tab、新行以及这些字符的Unicode形式）：
+
+Console.WriteLine (" abc \\t\\r\\n ".Trim().Length); // 3
+
+Replace可以替换字符串特定的字符或子串：
+
+.. code:: csharp
+
+    Console.WriteLine ("to be done".Replace (" ", " | ") );  // to | be | done
+    Console.WriteLine ("to be done".Replace (" ", "")    );  // tobedone
+
+ToUpper与ToLower会返回输入字符串的大写或是小写版本。默认情况下，这些方法会考虑到用户的当前语言设置；ToUpperInvariant与ToLowerInvariant总是应用英语字母规则。
+
+**分割与合并字符串**
+
+Split会将一个字符串分割为单词数组返回：
+
+.. code:: csharp
+
+    string[] words = "The quick brown fox".Split();
+    foreach (string word in words)
+      Console.Write (word + "|");    // The|quick|brown|fox|
+
+默认情况下，Split使用空格作为分割符；该方法也被重载来接受char或是string的params数组作为分割符。Split也可以接受一个StringSplitOptions枚举，其中有一个选项可以移除空项：这对于单词由一行中的多个分割符分割的情况下十分有用。
+
+静态的Join方法会执行与Split相反的操作。他会接受一个分割符与一个字符串数组：
+
+.. code:: csharp
+
+    string[] words = "The quick brown fox".Split();
+    string together = string.Join (" ", words);      // The quick brown fox
+
+静态的Concat方法与Join方法类似，但是只接受一个params字符串数组而没有分割符。Concat实际上与+操作符等同（实际上编译器会将+转换为Concat）：
+
+.. code:: csharp
+
+    string sentence     = string.Concat ("The", " quick", " brown", " fox");
+    string sameSentence = "The" + " quick" + " brown" + " fox";
+
+**String.Format与组合格式化字符串**
+
+静态的Format方法提供了一个方便的方法来构建嵌入变量的字符串。嵌入的变量可以为任何类型；Format只是简单的在这些变量上调用ToString方法。
+
+包含嵌入变量的主字符串被称为组合格式字符串。当调用String.Format时，我们提供一个组合字符串其后跟随每一个嵌入变量。例如：
+
+.. code:: csharp
+
+    string composite = "It's {0} degrees in {1} on this {2} morning";
+    string s = string.Format (composite, 35, "Perth", DateTime.Now.DayOfWeek);
+    // s == "It's 35 degrees in Perth on this Friday morning"
+
+每一个花括号中的数字被称为格式化项。与参数位置所对应的数字其后可以有：
+
+-  逗号与要应用的最小宽度
+-  冒号与格式化字符串
+
+最小宽度对于对齐列十分有用。如果值为负的，数据是左对齐的；否则为右对齐。例如：
+
+.. code:: csharp
+
+    string composite = "Name={0,-20} Credit Limit={1,15:C}";
+    Console.WriteLine (string.Format (composite, "Mary", 500));
+    Console.WriteLine (string.Format (composite, "Elizabeth", 20000));
+
+以下为输出结果：
+
+.. code:: text
+
+    Name=Mary                 Credit Limit=        $500.00
+    Name=Elizabeth            Credit Limit=     $20,000.00
+
+不使用string.Format的等价方法如下：
+
+.. code:: csharp
+
+    string s = "Name=" + "Mary".PadRight (20) +
+               " Credit Limit=" + 500.ToString ("C").PadLeft (15);
+
+比较字符串
+~~~~~~~~~~
+
+当比较两个值时，.NET框架会区别相等比较与顺序比较的概念。相等比较测试两个实体在语义上是否相同；顺序比较测试当以顺序或是逆序排列两个实例时哪个在前。
+
+对于字符串相等比较，我们可以使用==操作符或是string的Equals方法。后一种方法更为强大，因为他可以允许我们指定如大小写敏感这样的选项。
+
+对于字符串顺序比较，我们可以使用CompareTo实体方法或是静态的Compare与CompareOrdinal方法：这些方法会依据第一个值出现在第二值的前面、后面或是相同而返回正数、负数或零。
+
+在深入每一个细节之前，我们需要了解.NET底层字符串比较算法。
+
+**顺序与文化比较**
+
+对于字符串比较有两个基本算法：顺序与文化相关。顺序比较简单的将字符解释为数字（依据其数值Unicode值）；文化相关比较解释字符时会考虑到特定的语言。有两种特殊的文化：基于计算机控制面板设置的“当前文化”以及在所有计算机上都一样的“invariant
+culture”。
+
+对于相等比较，顺序与文化特定的算法都很有用。然而对于顺序比较，文化特定的比较几乎总是完美的；要依据字母顺序对字符串进行排序，我们需要一个字母表。顺序排序依赖于数值Unicode点值，其恰好将英语字符以字母顺序排列－但这样也许并不是我们所真正希望的。例如，考虑大小写敏感的排序，考虑“Atom”，“atom”与“Zamia”。invariant
+culture会将其排列为下列顺序：
+
+"Atom", "atom", "Zamia"
+
+而顺序排列会得到下列结果：
+
+"Atom", "Zamia", "atom"
+
+这是因为invariant
+culture封装了一个字母表，其中大写字母排在其对应小写字母的前面（AaBbCcDd...）。然而顺序算法会首先排列所有的大写字母，然后是所有的小写字母（A..Z,a..z）。这实际了回退到了1960年所发明的ASCII字符集合。
+
+**字符串相等比较**
+
+尽管顺序排序有这些限制，string的==操作符总是执行顺序大小写敏感排序。当调用无参数的string.Equals方法也会执行相同的操作；这为string类型定义了“默认”相等比较。
+
+下列方法会允许culture相关或是大小写敏感比较：
+
+.. code:: csharp
+
+    public bool Equals(string value, StringComparison comparisonType);
+    public static bool Equals (string a, string b,
+                               StringComparison comparisonType);
+
+静态版本更为高级，因为如果其中的一个或是两个字符串均为null时，该方法仍能工作。StringComparison是一个枚举，其定义如下：
+
+.. code:: csharp
+
+    public enum StringComparison
+    {
+      CurrentCulture,               // Case-sensitive
+      CurrentCultureIgnoreCase,
+      InvariantCulture,             // Case-sensitive
+      InvariantCultureIgnoreCase,
+      Ordinal,                      // Case-sensitive
+      OrdinalIgnoreCase
+    }
+
+例如：
+
+.. code:: csharp
+
+    Console.WriteLine (string.Equals ("foo", "FOO",
+                       StringComparison.OrdinalIgnoreCase));   // True
+    Console.WriteLine ("?" == "ǖ");                            // False
+    Console.WriteLine (string.Equals ("?", "ǖ",
+                       StringComparison.CurrentCulture));      // ?
+
+（最后的比较结果是由当前计算机的语言设置所决定的。）
+
+**字符串顺序比较**
+
+String的CompareTo实例方法会执行culture相关，大小写敏感的顺序比较。不同于==操作符，CompareTo并不使用顺序比较：对于顺序，culture相关的算法更为有用。
+
+该方法定义如下：
+
+public int CompareTo (string strB);
+
+对于其他的比较类型，我们可以调用静态的Compare与CompareOrdinal方法：
+
+.. code:: csharp
+
+    public static int Compare (string strA, string strB,
+                               StringComparison comparisonType);
+    public static int Compare (string strA, string strB, bool ignoreCase,
+                               CultureInfo culture);
+    public static int Compare (string strA, string strB, bool ignoreCase);
+    public static int CompareOrdinal (string strA, string strB);
+
+后两个方法是前两个方法的简写形式。
+
+所有的顺序比较方法都会第一个值是否位于第二值的后面，前面或是相等而返回一个正数、一个负数或是零：
+
+.. code:: csharp
+
+    Console.WriteLine ("Boston".CompareTo ("Austin"));    // 1
+    Console.WriteLine ("Boston".CompareTo ("Boston"));    // 0
+    Console.WriteLine ("Boston".CompareTo ("Chicago"));   // ?1
+    Console.WriteLine ("?".CompareTo ("ǖ"));              // 0
+    Console.WriteLine ("foo".CompareTo ("FOO"));          // ?1
+
+下面的代码会使用当前的文化执行大小写敏感的比较：
+
+Console.WriteLine (string.Compare ("foo", "FOO", true)); // 0
+
+通过提供CultureInfo对象，我们可以插入任意字母：
+
+.. code:: csharp
+
+    CultureInfo german = CultureInfo.GetCultureInfo ("de-DE");
+    int i = string.Compare ("Müller", "Muller", false, german);
+
+StringBuilder
+~~~~~~~~~~~~~
+
+StringBuilder类（位于System.Text名字空间）表示一个可变的（可修改）字符串。使用StringBuilder，我们可以Append，Insert，Remove以及Replace子字符串而不必替换整个StringBuilder。
+
+StringBuilder的构造函数可以接受一个初始字符串值及其初始容量的尺寸（默认为16个字符）。如果我们超出这个值，StringBuilder会自动调整其内部结构进行适应（会有一点性能损失）直到其最大容量（默认为int.MaxValue）。
+
+StringBuilder的一个通常应用就是通过重复调用Append来构造一个长字符串。这种方法要比重复连接普通的字符串类型要高效得多：
+
+.. code:: csharp
+
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 50; i++) sb.Append (i + ",");
+
+要获得最终的结果，可以调用ToString()：
+
+.. code:: csharp
+
+    Console.WriteLine (sb.ToString());
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,
+    27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,
+
+AppendLine会执行一个添加新行序列的Append。AppendFormat接受一个组合格式化字符串，类似于String.Format。
+
+类似于Insert，Remove与Replace方法，StringBuilder定义了一个Length属性以及一个用于获取/设置单个字符的可写索引器。
+
+要清空StringBuilder的内容，或者初始化一个新实例，或者将其Length设置为0。
+
+文本编码与Unicode
+~~~~~~~~~~~~~~~~~
+
+字符集是一个字符的分配，每一个具有一个数值编码或是编码点。有两种通常使用的字符集：Unicode与ASCII。Unicode有大约一百万个字符的地址空间，其中已分配的大约有100000个。Unicode覆盖了世界上大多数的语言，以及一个历史语言以及特殊符号。ASCII集合只是Unicode集合中的前127个字符，覆盖了我们在US风格的键盘上所看到的绝大数字符。ASCII早于Unicode大约30年，而由于其简单性与高效性仍然被使用：每一个字符由一个字节表示。
+
+.NET类型系统被设计用来处理Unicode字符集。ASCII通过作为Unicode字符集的子集被隐式支持。
+
+文本编码将字符由其数值编码点映射到二进制表示。在.NET中，当处理文本或是流时，文本编码就会派上用场了。当我们将一个文本文件读取到字符串，文本编码器将文本数据由二进制转换为char与string类型所希望的内部Unicode表示。
+
+在.NET中有两种文本编码类型：
+
+-  将Unicode字符集映射到其他字符集的文本编码
+-  使用标准Unicode encoding scheme的文本编码
+
+第一类包含遗留编码，例如IBM的EBCDIC以及在Unicode之前较为流行的带有高128区域扩展的8位字符集。ASCII编码也属于这一类别：他编码前128个字符并且丢弃其他字符。这一类别也包含非遗留的GB18030，这是中文编写程序的主要标准。
+
+第二类别主要有UTF-8，UTF-16与UTF-32（以及废弃的UTF-7）。他们之间的区别在于空间效率。UTF-8对于大多数的文本类型是最节省空间的：他使用一到四个字节来表示一个字符。前128个字符仅需要一个字节，从而与ASCII兼容。UTF-8对于文本文件与流（特别是网络流）是最流行的编码，并且是.NET中流的默认编码（事实上他几乎是所有隐式使用编码的默认编码）。
+
+UTF-16使用一个或是两个16位字来表示一个字符，并且是.NET在内部表示字符与字符串所使用的编码。某些程序也使用UTF-8来编写文件。
+
+UTF-32是最浪费空间的：他将每个代码点直接映射为32位，所以每个字符耗费四个字节。因此，UTF-32几乎很少使用。然而他却使得随机访问非常容易，因为每个字符占用相等的字节数。
+
+获取编码对象
+~~~~~~~~~~~~
+
+System.Text中的Encoding类是封装文本编码类的共同基类。他有多个子类－其目的是封装具有类似特性的编码族。实例化一个正确配置的类的最简单的方法是使用标准的IANA名字调用Encoding.GetEncoding：
+
+.. code:: csharp
+
+    Encoding utf8 = Encoding.GetEncoding ("utf-8");
+    Encoding chinese = Encoding.GetEncoding ("GB18030");
+
+常见的编码也可以通过Encoding的静态属性获得。
+
+静态的GetEncodings方法会返回所有所支持的编码及其标准IANA名字的列表：
+
+.. code:: csharp
+
+    foreach (EncodingInfo info in Encoding.GetEncodings())
+      Console.WriteLine (info.Name);
+
+获取编码的另一个方法是直接实例化编码类。这样可以允许我们通过构造器参数设置多个属性，包括：
+
+-  如果解码时遇到不正确的字节序列是否抛出异常。默认值为false。
+-  使用大端还是小端编码/解码UTF16/UTF-32。默认为小端，这是Windows操作系统上的标准。
+-  是否发送字节顺序标记（表明端类型的前缀）。
+
+为文件与流I/O编码
+~~~~~~~~~~~~~~~~~
+
+Encoding对象最常见的应用是控制文本如何写入或是读取到文件或流。例如，下面的代码会使用UTF-16编码将“Testing...”写入到名为data.txt的文件中：
+
+System.IO.File.WriteAllText ("data.txt", "Testing...",
+Encoding.Unicode);
+
+如果我们忽略最后一个参数，WriteAllText则会应用UTF-8编码。
+
+我们会在第14章再回到该主题。
+
+编码字节数组
+~~~~~~~~~~~~
+
+我们也可以使用Encoding对象在字节数组之间进行转换。GetBytes方法使用指定的编码将string转换为byte[]；GetSTring由byte[]转换为string：
+
+.. code:: csharp
+
+    byte[] utf8Bytes  = System.Text.Encoding.UTF8.GetBytes    ("0123456789");
+    byte[] utf16Bytes = System.Text.Encoding.Unicode.GetBytes ("0123456789");
+    byte[] utf32Bytes = System.Text.Encoding.UTF32.GetBytes   ("0123456789");
+    Console.WriteLine (utf8Bytes.Length);    // 10
+    Console.WriteLine (utf16Bytes.Length);   // 20
+    Console.WriteLine (utf32Bytes.Length);   // 40
+    string original1 = System.Text.Encoding.UTF8.GetString    (utf8Bytes);
+    string original2 = System.Text.Encoding.Unicode.GetString (utf16Bytes);
+    string original3 = System.Text.Encoding.UTF32.GetString   (utf32Bytes);
+    Console.WriteLine (original1);          // 0123456789
+    Console.WriteLine (original2);          // 0123456789
+    Console.WriteLine (original3);          // 0123456789
+
+UTF-16与代理对
+~~~~~~~~~~~~~~
+
+我们也许还会记起.NET使用UTF-16存储字符与字符串。因为每个字符需要一个或是两个16位字，而一个char仅是16位长度。某些Unicode字符需要2个char进行表示。这会导致两个后果：
+
+-  字符串的Length属性也许会大于实际的字符数
+-  单一char并不总是足够表示一个Unicode字符
+
+大多数程序都会忽视这两点，因为几乎所有常见的字符都正好落入所谓的基本多语言区（BMP）Unicode范围内，这在UTF-16中仅需要一个16位字。BMP覆盖了多种世界语言并且包含多于3000个中国字符。除此之外是一些古老语言，音乐符号以及一些不常见的中国字符。
+
+如果我们需要支持两字字符，char中的下列静态方法可以将一个32位代码点转换为两个char的字符，或是相反的操作：
+
+.. code:: csharp
+
+    string ConvertFromUtf32 (int utf32)
+    int    ConvertToUtf32   (char highSurrogate, char lowSurrogate)
+
+2字字符被称为代用品。他们很容易被定痊，因为每一个字位于0xD800到0xDFFF之间。我们可以使用char中的下列方法进行辅助操作：
+
+.. code:: csharp
+
+    bool IsSurrogate     (char c)
+    bool IsHighSurrogate (char c)
+    bool IsLowSurrogate  (char c)
+    bool IsSurrogatePair (char highSurrogate, char lowSurrogate)
+
+System.Globalization名字空间中的StringInfo类也提供了一系列方法与属性用于处理两字字符。
+
+BMP之外的字符通常需要特殊的字体并且具有有限的操作系统支持。
+
+日期与时间
+----------
+
+System名字空间中有三个不可修改的结构可以完成表示日期与时间的工作：DateTime，DateTimeOffset与TimeSpan。C#并没有定义任何映射到这些类型的特殊关键字。
+
+TimeSpan
+~~~~~~~~
+
+TimeSpane表示时间的间隔－或是一天中的时间。在后一种角色中，他仅是简单的“钟表”时间（无日期），其等同于自午夜以来的时间。TimeSpan具有100ns的精度，具有大约一千万天的最大值，并且可以为正，可以为负。
+
+构建TimeSpan有三种方法：
+
+-  通过构造函数
+-  通过调用静态的From方法
+-  通过两个DateTime的相减
+
+其构造函数如下：
+
+.. code:: csharp
+
+    public TimeSpan (int hours, int minutes, int seconds);
+    public TimeSpan (int days, int hours, int minutes, int seconds);
+    public TimeSpan (int days, int hours, int minutes, int seconds,
+                                                       int milliseconds);
+    public TimeSpan (long ticks);   // Each tick = 100ns
+
+如果我们仅希望以单一单位指定间隔，例如分钟，小时等，静态的From方法会更为方便：
+
+.. code:: csharp
+
+    public static TimeSpan FromDays (double value);
+    public static TimeSpan FromHours (double value);
+    public static TimeSpan FromMinutes (double value);
+    public static TimeSpan FromSeconds (double value);
+    public static TimeSpan FromMilliseconds (double value);
+
+例如：
+
+.. code:: csharp
+
+    Console.WriteLine (new TimeSpan (2, 30, 0));     // 02:30:00
+    Console.WriteLine (TimeSpan.FromHours (2.5));    // 02:30:00
+    Console.WriteLine (TimeSpan.FromHours (?2.5));   // ?02:30:00
+
+TimeSpan重载了操作符，以及+与-操作符。下面的表达式会计算得到2.5小时的TimeSpan：
+
+TimeSpan.FromHours(2) + TimeSpan.FromMinutes(30);
+
+下面的语句会计算得到比10天少1秒的TimeSpan：
+
+TimeSpan.FromDays(10) - TimeSpan.FromSeconds(1); // 9.23:59:59
+
+使用该表达式，我们可以演示整数属性Days，Hours，Minutes，Seconds与Milliseconds：
+
+.. code:: csharp
+
+    TimeSpan nearlyTenDays = TimeSpan.FromDays(10) - TimeSpan.FromSeconds(1);
+    Console.WriteLine (nearlyTenDays.Days);          // 9
+    Console.WriteLine (nearlyTenDays.Hours);         // 23
+    Console.WriteLine (nearlyTenDays.Minutes);       // 59
+    Console.WriteLine (nearlyTenDays.Seconds);       // 59
+    Console.WriteLine (nearlyTenDays.Milliseconds);  // 0
+
+相对应的，Total属性会返回表示整个时间间隔的double类型值：
+
+.. code:: csharp
+
+    Console.WriteLine (nearlyTenDays.TotalDays);          // 9.99998842592593
+    Console.WriteLine (nearlyTenDays.TotalHours);         // 239.999722222222
+    Console.WriteLine (nearlyTenDays.TotalMinutes);       // 14399.9833333333
+    Console.WriteLine (nearlyTenDays.TotalSeconds);       // 863999
+    Console.WriteLine (nearlyTenDays.TotalMilliseconds);  // 863999000
+
+静态Parse方法与ToString方法正相反，该方法会将字符串转换为TimeSpan。TryParse方法与其类似，但是如果转换失败会返回false而不是抛出异常。XmlConvert类也提供了遵循标准XML格式协议的TimeSpan/字符串转换方法。
+
+TimeSpan的默认值为TimeSpan.Zero。
+
+TimeSpan也可以用来表示一天中的时间（自午夜以来逝去的时间）。要获取一天中的当前时间，调用DateTime.Now.TimeOfDay。
+
+DateTime与DateTimeOffset
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+DateTime与DateTimeOffset是用于表示日期与时间的不可修改的结构。他们具有100ns的精度，并且覆盖由0001到9999年的范围。
+
+DateTimeOffset是在框架3.5中加入的，并且功能类似于DateTime。其独特性在于他也可以存储UTC偏移量；当进行跨时区的比较时，这会得到更有意义的结果。
+
+**在DateTime与DateTimeOffst之间进行选择**
+
+DateTime与DateTimeOffset之间的区别在于如何处理时区。DateTime结合三个状态标记来表明DateTime是否相对于：
+
+-  当前计算机的本地时间
+-  UTC
+-  未指定
+
+DateTimeOffset更为特殊－他将与UTC的偏移量存储为TimeSpan：
+
+July 01 2007 03:00:00 ?06:00
+
+这会影响相等比较，而这也正在DateTime与DateTimeOffset之间进行选择的主要因素。特别是：
+
+-  DateTime在比较时会忽略三状态标记，如果他们具有相同的年，月，日，时，分等，则认为他们是相等的。
+-  DateTimeOffset则认为如果两个值指向相同的时间点时才相等。
+
+所以，DateTime会认为下面的两个值不同，而DateTimeOffset则认为他们相同：
+
+.. code:: text
+
+    July 01 2007 09:00:00 +00:00 (GMT)
+    July 01 2007 03:00:00 ?06:00 (local time, Central America)
+
+大多数情况下，DateTimeOffset的相等逻辑更为可取。例如，在计算两个国际事件哪一个更近时，DateTimeOffset会隐式的给出正确答案。类似的，进行DDOS攻击的骇客也会考虑DateTimeOffset。使用DateTime完成相同的事情则要求在我们的程序使用统一的时区。这是有问题的，原因有两个：
+
+-  为了终端用户友好，UTC DateTime在格式化之前需要显式转换为本地时间。
+-  很容易忘记考虑本地DateTime。
+
+然而，在运行时指定与本地机器的相对值时，DateTime更合适－例如，如果我们希望在下周六，本地时间3
+A.M（此时活动最少）调度国际办公室的归档。此时，DateTime更为合适，因为他会考虑到每一个办公室的本地时间。
+
+我们会在稍后更为详细的讨论时区与相等比较。
+
+**构建DateTime**
+
+DateTime定义了接受年，月，日以及可选的时，分，秒以及毫秒整数的构造函数：
+
+.. code:: csharp
+
+    public DateTime (int year, int month, int day);
+    public DateTime (int year, int month, int day,
+                     int hour, int minute, int second, int millisecond);
+
+如果我们仅指定了日期，则时间会被隐式的设置为午夜（0：00）。
+
+DateTime构造函数也允许我们指定DateTimeKind－一个具有下列值的枚举：
+
+Unspecified, Local, Utc
+
+这相当前前面内容中所描述的三状态标记。Unspecified是默认值，意味着DateTime是时区相关的。Locale意味着相对于当前机器上的本地时区。本地DateTime并没有包含关于其指向的时区的信息，而且也不同于DateTimeOffset，不包含相对UTC偏移量的信息。
+
+DateTime的Kind属性会返回其DateTimeKind。
+
+DateTime的构造函数同时被重载接受Calendar对象－这允许我们使用在System.Globalization中定义的Calendar子类来指定日期：
+
+.. code:: csharp
+
+    DateTime d = new DateTime (5767, 1, 1,
+                              new System.Globalization.HebrewCalendar());
+    Console.WriteLine (d);    // 12/12/2006 12:00:00 AM
+
+（该示例中的日期格式依赖于我们机器的控制面板的设置。）DateTime总是默认使用罗马日期－这个示例在构建过程中发生了时间转换。要使用其他的日历执行计算，我们必须使用Calendar子类本身的方法。
+
+我们也可以使用long类型的ticks值来构建DateTime，其中ticks是由午夜01/01/0001算起的100ns间隔数。
+
+出于交互性的考虑，DateTime提供了静态的FromFileTime与FromFileTimeUtc方法用于由Windows文件时间（指定为long）转换以及FromOADate用于由OLE自动日期时间（指定为double）转换。
+
+要由字符串构建DateTime，调用静态的Parse或ParseExact方法。两个方法都可以接受标记与格式提供器；ParseExact同时接受一个格式字符串。我们会在稍后进行详细讨论。
+
+**构建DateTimeOffset**
+
+DateTimeOffset具有类似的构造函数集。区别在于我们同时指定一个UTC偏移作为TimeSpan：
+
+.. code:: csharp
+
+    public DateTimeOffset (int year, int month, int day,
+                           int hour, int minute, int second,
+                           TimeSpan offset);
+    public DateTimeOffset (int year, int month, int day,
+                           int hour, int minute, int second, int millisecond,
+                           TimeSpan offset);
+
+TimeSpan必须为分的整数，否则会抛出异常。
+
+DateTimeOffset同时还有接受Calendar对象，long
+ticks值以及接受字符串的静态Parse与ParseExact方法的构造函数。
+
+我们可以使用下列的构造函数由DateTime构造DateTimeOffset：
+
+.. code:: csharp
+
+    public DateTimeOffset (DateTime dateTime);
+    public DateTimeOffset (DateTime dateTime, TimeSpan offset);
+
+或是使用隐式转换：
+
+DateTimeOffset dt = new DateTime (2000, 2, 3);
+
+如果我们没有指定偏移，则会使用下列规则由DateTime值进行推测：
+
+-  如果DateTime的DateTimeKind为Utc，则偏移量为0。
+-  如果DateTime的DateTimeKind为Local或是Unspecified（默认），则偏移量由当前本地时区计算获得。
+
+要在另一个方向上进行转换，DateTimeOffset提供了三个属性返回DateTime类型的值：
+
+-  UtcDateTime属性返回UTC时间的DateTime。
+-  LocalDateTime属性返回当前本地时区的DateTime（如果需要则进行转换）。
+-  DateTime属性返回指定时区的DateTime，其Kind为Unspecified。
+
+**当前DateTime/DateTimeOffset**
+
+DateTime与DateTimeOffset都具有一个返回当前日期与时间的Now属性：
+
+.. code:: csharp
+
+    Console.WriteLine (DateTime.Now);         // 11/11/2007 1:23:45 PM
+    Console.WriteLine (DateTimeOffset.Now);   // 11/11/2007 1:23:45 PM ?06:00
+
+DateTime同时提供了仅返回日期部分的Today属性：
+
+Console.WriteLine (DateTime.Today); // 11/11/2007 12:00:00 AM
+
+静态的UtcNow属性返回当前的UTC日期与时间：
+
+.. code:: csharp
+
+    Console.WriteLine (DateTime.UtcNow);        // 11/11/2007 7:23:45 AM
+    Console.WriteLine (DateTimeOffset.UtcNow);  // 11/11/2007 7:23:45 AM +00:00
+
+所有这些方法的精度依赖于操作系统，并且通常在10－20ms范围内。
+
+**处理日期与时间**
+
+DateTime与DateTimeOffset提供了类似的实例属性集来返回各种日期与时间元素：
+
+.. code:: csharp
+
+    DateTime dt = new DateTime (2000, 2, 3,
+                                10, 20, 30);
+    Console.WriteLine (dt.Year);         // 2000
+    Console.WriteLine (dt.Month);        // 2
+    Console.WriteLine (dt.Day);          // 3
+    Console.WriteLine (dt.DayOfWeek);    // Thursday
+    Console.WriteLine (dt.DayOfYear);    // 34
+    Console.WriteLine (dt.Hour);         // 10
+    Console.WriteLine (dt.Minute);       // 20
+    Console.WriteLine (dt.Second);       // 30
+    Console.WriteLine (dt.Millisecond);  // 0
+    Console.WriteLine (dt.Ticks);        // 630851700300000000
+    Console.WriteLine (dt.TimeOfDay);    // 10:20:30  (returns a TimeSpan)
+
+DateTimeOffst同时提供了一个TimeSpan类型的Offset属性。
+
+两个类型提供了下列的实例方法来执行计算（大多数接受double与int类型的参数）：
+
+.. code:: csharp
+
+    AddYears  AddMonths   AddDays
+    AddHours  AddMinutes  AddSeconds  AddMilliseconds  AddTicks
+
+这些方法都会返回一个新的DateTime或DateTimeSpan，并且这些方法考虑到闰年的情况。我们可以传递一个负数进行相减。
+
+Add方法将TimeSpan添加到DateTime或是DateTimeOffset。+操作符被重载完成同样的工作：
+
+.. code:: csharp
+
+    TimeSpan ts = TimeSpan.FromMinutes (90);
+    Console.WriteLine (dt.Add (ts));         // 3/02/2000 11:50:30 AM
+    Console.WriteLine (dt + ts);             // 3/02/2000 11:50:30 AM
+
+我们也可以由DateTime/DateTimeOffset减去TimeSpan或是由一个DateTime/DateTimeOffset减去另一个。后者会返回给我们一个TimeSpan：
+
+.. code:: csharp
+
+    DateTime thisYear = new DateTime (2007, 1, 1);
+    DateTime nextYear = thisYear.AddYears (1);
+    TimeSpan oneYear = nextYear - thisYear;
+
+**格式化与解析**
+
+在DateTime上调用ToString会将结果格式化为一个短日期（所有数字）后跟长时间（包括秒）的格式。例如：
+
+13/02/2000 11:50:30 AM
+
+默认情况下，操作系统的控制面板会决定是否先显示日，月还是年，是否使用前缀零，以及是使用12还是24小时。
+
+在DateTimeOffset上调用ToString会得到相同的结果，所不同的是偏移量也会同时返回：
+
+3/02/2000 11:50:30 AM ?06:00
+
+ToShortDateString与ToLongDateString方法会仅返回日期部分。长日期格式也是由控制面板决定的；例如Saturday,
+17 February
+2007。ToShortTimeString与ToLongTimeString会返回时间部分，例如17:10:10（前者没有秒）。
+
+上面所描述的四个方法实际上是四种不同格式化字符串的缩写形式。ToString被重载来接受格式字符串与提供者，从而允许我们指定一个宽泛的选项范围并且控制如何应用区域设置。
+
+静态的Parse与ParseExact方法与ToString正相反，将一个字符串转换为DateTime或是DateTimeOffest。Parse方法也被重载来接受格式提供者。
+
+**Null DateTime与DateTimeOffset值**
+
+因为DateTime与DateTimeOffset是结构，他们本质上是不可以为空的。当我们需要时，我们可以有两种方法：
+
+-  使用Nullable类型（例如DateTime?或DateTimeOffet?）
+-  使用静态域DateTime.MinValue或DateTimeOffset.MinValue（这些类型的默认值）
+
+可空类型通常是最好的方法，因为编译器有助于避免错误。DateTime.MinValue对于向后兼容非常有用。
+
+日期与时区
+----------
+
+在本节中，我们将会详细解释时区如何影响DateTime与DateTimeOffset。我们同时会了解TimeZone与TimeZoneInfo类型，提供了关于时区偏移与夏时令信息的类型。
+
+DateTime与时区
+~~~~~~~~~~~~~~
+

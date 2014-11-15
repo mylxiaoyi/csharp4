@@ -1,0 +1,1240 @@
+Chapter 18. Reflection and Metadata
+===================================
+
+正如我们在前面的章节中所看到的，C#程序编译进一个包含元数据，已编译代码以及资源的程序集中。在运行时检视元数据以及已编译的代码被称为反射。
+
+程序集中的已编译代码几乎包含原始源码中的所有内容。但是某些内容会丢失，例如局部变量名，注释以及预处理器语句。然而，反映可以访问其他所有的内容，甚至是编写一个反编译器也是可能的。
+
+.NET中以及通过C#（例如动态绑定，序列化，数据绑定以及远程）所提供的许多服务都依赖于元数据的存在。我们自己的程序也可以利用这种元数据，甚至是通过使用自定义属性的新信息进行扩展。System.Reflection名字空间提供反映API。也可以通过System.Reflection.Emit名字空间中的类在运行时或是动态创建新的元数据与IL中的可执行指令。
+
+本章中的示例假定我们导入了System与System.Reflection以及System.Reflection.Emit名字空间。
+
+反射与激活类型
+--------------
+
+在本节中，我们将会探讨如何获取Type，检视其元数据，并且使用他来动态实例化对象。
+
+获取类型
+~~~~~~~~
+
+System.Type的实例表示类型的元数据。因为Type被广泛使用，他位于System名字空间中而不是Sytsem.Reflection名字空间。
+
+我们可以通过在任意对象上调用GetType方法或是使用C#的typeof操作来获得System.Type的实例：
+
+.. code:: csharp
+
+    Type t1 = DateTime.Now.GetType();     // Type obtained at runtime
+    Type t2 = typeof (DateTime);          // Type obtained at compile time
+
+我们可以使用typeof来获得数组类型与泛型类型，如下所示：
+
+.. code:: csharp
+
+    Type t3 = typeof (DateTime[]);          // 1-d Array type
+    Type t4 = typeof (DateTime[,]);         // 2-d Array type
+    Type t5 = typeof (Dictionary<int,int>); // Closed generic type
+    Type t6 = typeof (Dictionary<,>);       // Unbound generic type
+
+我们也可以通过名字获取Type。如果有一个到Assembly的引用，则可以调用Assembly.GetType：
+
+Type t = Assembly.GetExecutingAssembly().GetType ("Demos.TestProgram");
+
+如果我们没有Assembly对象，我们可以通过其程序集修饰名（类型的全名后跟完全的修饰名）来获得类型。程序集隐式载入，就如同我们调用Assembly.Load(string)一样：
+
+.. code:: csharp
+
+    Type t = Type.GetType ("System.Int32, mscorlib, Version=2.0.0.0, " +
+                           "Culture=neutral, PublicKeyToken=b77a5c561934e089");
+
+一旦我们拥有System.Type对象，我们就可以使用其属性来访问类型的名字，程序集，基类型，可见性，等。如下所示：
+
+.. code:: csharp
+
+    Type stringType = typeof (String);
+    string name     = stringType.Name;          // String
+    Type baseType   = stringType.BaseType;      // typeof(Object)
+    Assembly assem  = stringType.Assembly;      // mscorlib.dll
+    bool isPublic   = stringType.IsPublic;      // true
+
+System.Type实例是进入类型整个元数据以及其定义所在的程序集的一个窗口。
+
+**获取数组类型**
+
+正如我们刚才看到的，typeof与GetType可以用于数组类型。我们也可以通过在元素类型上调用MakeArrayType来获取数组类型：
+
+.. code:: csharp
+
+    Type tSimpleArray = typeof (int).MakeArrayType();
+    Console.WriteLine (tSimpleArray == typeof (int[]));     // True
+
+可以向MakeArray传递一个整数参数来创建多维矩形数组：
+
+.. code:: csharp
+
+    Type tCube = typeof (int).MakeArrayType (3);       // cube shaped
+    Console.WriteLine (tCube == typeof (int[,,]));     // True
+
+GetElementType执行相反的操作；他获取数组类型的元素类型：
+
+Type e = typeof (int[]).GetElementType(); // e == typeof (int)
+
+GetArrayRank返回一个矩形数组的维数：
+
+int rank = typeof (int[,,]).GetArrayRank(); // 3
+
+**获取嵌入类型**
+
+要获取嵌入类型，在所包含的类型上调用GetNestedTypes。例如：
+
+.. code:: csharp
+
+    foreach (Type t in typeof (System.Environment).GetNestedTypes())
+      Console.WriteLine (t.FullName);
+    OUTPUT: System.Environment+SpecialFolder
+
+关于嵌入类型的一个警告就是CLR会将嵌入类型看作具有特殊的“嵌入”访问级别。例如：
+
+.. code:: csharp
+
+    Type t = typeof (System.Environment.SpecialFolder);
+    Console.WriteLine (t.IsPublic);                      // False
+    Console.WriteLine (t.IsNestedPublic);                // True
+
+类型名字
+~~~~~~~~
+
+一个类型有Namespace，Name与FullName属性。在大数情况下，FullName是前两者的组合：
+
+.. code:: csharp
+
+    Type t = typeof (System.Text.StringBuilder);
+    Console.WriteLine (t.Namespace);      // System.Text
+    Console.WriteLine (t.Name);           // StringBuilder
+    Console.WriteLine (t.FullName);       // System.Text.StringBuilder
+
+这个规则有两个例外：嵌入类型与封装的泛型类型。
+
+**嵌入类型名字**
+
+对于嵌入类型，所包含的类型只出现在FullName中：
+
+.. code:: csharp
+
+    Type t = typeof (System.Environment.SpecialFolder);
+    Console.WriteLine (t.Namespace);      // System
+    Console.WriteLine (t.Name);           // SpecialFolder
+    Console.WriteLine (t.FullName);       // System.Environment+SpecialFolder
+
++号将包含类型与嵌入的名字空间所区别。
+
+**泛型类型名字**
+
+泛型类型名字以'符号为前缀，其后是类型参数的个数。如果泛型类型是非绑定的，则这一规则同样适用于Name与FullName：
+
+.. code:: csharp
+
+    Type t = typeof (Dictionary<,>); // Unbound
+    Console.WriteLine (t.Name);      // Dictionary'2
+    Console.WriteLine (t.FullName);  // System.Collections.Generic.Dictionary'2
+
+然而如果泛型类型被封闭，FullName会要求额外的附加物。每一个类型参数的完全程序集修饰名会被枚举：
+
+.. code:: csharp
+
+    Console.WriteLine (typeof (Dictionary<int,string>).FullName);
+    // OUTPUT:
+    System.Collections.Generic.Dictionary'2[[System.Int32, mscorlib,
+    Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089],
+    [System.String, mscorlib, Version=2.0.0.0, Culture=neutral,
+    PublicKeyToken=b77a5c561934e089]]
+
+这可以保证AssemblyQualifiedName（类型的全名与程序集名字的组合）包含足够的信息来完全标识泛型类型及其类型参数。
+
+**数组与指针类型名字**
+
+数组使用与我们在typeof表达式中所有的相同前缀来表示：
+
+.. code:: csharp
+
+    Console.WriteLine (typeof ( int[]  ).Name);      // Int32[]
+    Console.WriteLine (typeof ( int[,] ).Name);      // Int32[,]
+    Console.WriteLine (typeof ( int[,] ).FullName);  // System.Int32[,]
+
+指针类型类似：
+
+.. code:: csharp
+
+    Console.WriteLine (typeof (byte*).Name);     // Byte*
+
+**ref与out参数类型名字**
+
+描述ref与out参数的Type具有一个&前缀：
+
+.. code:: csharp
+
+    Type t = typeof (bool).GetMethod ("TryParse").GetParameters()[1]
+                                                 .ParameterType;
+    Console.WriteLine (t.Name);    // Boolean&
+
+基类型与接口
+~~~~~~~~~~~~
+
+Type公开了BaseType属性：
+
+.. code:: csharp
+
+    Type base1 = typeof (System.String).BaseType;
+    Type base2 = typeof (System.IO.FileStream).BaseType;
+    Console.WriteLine (base1.Name);     // Object
+    Console.WriteLine (base2.Name);     // Stream
+
+GetInterfaces方法返回一个类型所实现的接口：
+
+.. code:: csharp
+
+    foreach (Type iType in typeof (Guid).GetInterfaces())
+      Console.WriteLine (iType.Name);
+    IFormattable
+    IComparable
+    IComparable'1
+    IEquatable'1
+
+反射为C#的静态is操作提供了两个动态等同物：
+
+-  IsInstanceOfType:接收一个类型与实例
+-  IsAssignableFrom：接受两个类型
+
+下面是第一个的示例：
+
+.. code:: csharp
+
+    object obj  = Guid.NewGuid();
+    Type target = typeof (IFormattable);
+    bool isTrue   = obj is IFormattable;             // Static C# operator
+    bool alsoTrue = target.IsInstanceOfType (obj);   // Dynamic equivalent
+
+IsAssignableFrom更为复杂：
+
+.. code:: csharp
+
+    Type target = typeof (IComparable), source = typeof (string);
+    Console.WriteLine (target.IsAssignableFrom (source));         // True
+
+IsSubclassOf方法的工作原则与IsAssignableFrom类型，但是排除了接口。
+
+实例化类型
+~~~~~~~~~~
+
+有两种由其类型动态实例化对象的方法：
+
+-  调用静态的Activator.CreateInstance方法
+-  通过在Type上调用GetConstructor所获得的ConstructorInfo对象上调用Invoke方法
+
+Activator.CreateInstance接受一个类型以及可以传递给构造器的可选参数：
+
+.. code:: csharp
+
+    int i = (int) Activator.CreateInstance (typeof (int));
+    DateTime dt = (DateTime) Activator.CreateInstance (typeof (DateTime),
+                                                       2000, 1, 1);
+
+CreateInstance可以让我们指定许多其他选项，例如要从中载入类型的程序集，目标程序域，以及是否要绑定到一个非公开的构造器。如果运行时不能找到合适的构造器则会抛出MissingMethodException。
+
+当我们的参数值在重载的构造器之间不能确定时，在ConstructorInfo上调用Invoke方法则是必要的。例如，假定类X有两个构造器：一个接受string类型参数，而另一个接受StringBuilder类型参数。当我们向Activator.CreateInstance传递一个null参数时目标是不确定的。这时我们就需要使用ConstructorInfo方法：
+
+.. code:: csharp
+
+    // Fetch the constructor that accepts a single parameter of type string:
+    ConstructorInfo ci = typeof (X).GetConstructor (new[] { typeof (string) };
+    // Construct the object using that overload, passing in null:
+    object foo = ci.Invoke (new object[] { null });
+
+要仅基于元素类型动态实例化数组，首先调用MakeArrayType。我们也可以实例化一个泛型类型：我们会在后面的章节中进行描述。
+
+要动态实例化一个委托，调用Delegate.CreateDelegate。下面的示例演示了实例化一个实例委托与一个静态委托：
+
+.. code:: csharp
+
+    class Program
+    {
+      delegate int IntFunc (int x);
+      static int Square (int x) { return x * x; }       // Static method
+      int        Cube   (int x) { return x * x * x; }   // Instance method
+      static void Main()
+      {
+        Delegate staticD = Delegate.CreateDelegate
+          (typeof (IntFunc), typeof (Program), "Square");d
+        Delegate instanceD = Delegate.CreateDelegate
+          (typeof (IntFunc), new Program(), "Cube");
+        Console.WriteLine (staticD.DynamicInvoke (3));      // 9
+        Console.WriteLine (instanceD.DynamicInvoke (3));    // 27
+      }
+    }
+
+我们可以通过DynamicInvoke来调用返回的Delegate对象，正如我们在示例中所做的，或者是通过转换为类型委托：
+
+.. code:: csharp
+
+    IntFunc f = (IntFunc) staticD;
+    Console.WriteLine (f(3));         // 9 (but much faster!)
+
+我们可以向CreateDelegate传递MethodInfo，而不是一个方法名。我们稍后将会描述MethodInfo。
+
+泛型类型
+~~~~~~~~
+
+Type可以表示一个封闭的或是非绑定的泛型类型。正如在编译时，封闭的泛型类型可以被实例化，而未绑定的类型则不可以：
+
+.. code:: csharp
+
+    Type closed = typeof (List<int>);
+    List<int> list = (List<int>) Activator.CreateInstance (closed);  // OK
+    Type unbound   = typeof (List<>);
+    object anError = Activator.CreateInstance (unbound);    // Runtime error
+
+MakeGenericType方法将一个未绑定泛型类型转换为一个封闭的泛型类型。只需要简单的传递一个类型参数：
+
+.. code:: csharp
+
+    Type unbound = typeof (List<>);
+    Type closed = unbound.MakeGenericType (typeof (int));
+
+GetGenericTypeDefinition方法执行相反的操作：
+
+.. code:: csharp
+
+    Type unbound2 = closed.GetGenericTypeDefinition();  // unbound == unbound2
+
+如果Type为泛型的，则IsGenericType属性会返回true，而如果泛型类型是未绑定的，则IsGenericTypeDefinition属性会返回true。下面的代码测试一个类型是否为可空的值类型：
+
+.. code:: csharp
+
+    Type nullable = typeof (bool?);
+    Console.WriteLine (
+      nullable.IsGenericType &&
+      nullable.GetGenericTypeDefinition() == typeof (Nullable<>));   // True
+
+GetGenericArguments返回封闭泛型类型的类型参数：
+
+.. code:: csharp
+
+    Console.WriteLine (closed.GetGenericArguments()[0]);     // System.Int32
+    Console.WriteLine (nullable.GetGenericArguments()[0]);   // System.Boolean
+
+对于未绑定的泛型类型，GetGenericArguments返回一个表示在泛型定义中指定的占位符类型的伪类型：
+
+Console.WriteLine (unbound.GetGenericArguments()[0]); // T
+
+反射与调用成员
+--------------
+
+GetMembers方法返类型的成员。考虑下面的类：
+
+.. code:: csharp
+
+    class Walnut
+    {
+      private bool cracked;
+      public void Crack() { cracked = true; }
+    }
+
+我们可以像下面这样来反射其公开成员：
+
+.. code:: csharp
+
+    MemberInfo[] members = typeof (Walnut).GetMembers();
+    foreach (MemberInfo m in members)
+      Console.WriteLine (m);
+
+其结果如下：
+
+.. code:: csharp
+
+    Void Crack()
+    System.Type GetType()
+    System.String ToString()
+    Boolean Equals(System.Object)
+    Int32 GetHashCode()
+    Void .ctor()
+
+当不指定参数调用时，GetMembers会返回一个类型（及其基类型）的所有公开成员。GetMember通过名字接收特定的成员－尽管他仍然返回一个数组，因为成员可以被重载：
+
+.. code:: csharp
+
+    MemberInfo[] m = typeof (Walnut).GetMember ("Crack");
+    Console.WriteLine (m[0]);                              // Void Crack()
+
+MemberInfo同时有一个名为类型MemberTypes的MemberType的属性。这是一个具有下列值的标志枚举：
+
+.. code:: csharp
+
+    All           Custom        Field        NestedType     TypeInfo
+    Constructor   Event         Method       Property
+
+当调用GetMembers，我们可以传递一个MemberTypes实例来限制返回的成员类型。相对应的，我们可以通过调用GetMethods，GetFields，GetProperties，GetEvents，GetConstructors或是GetNestedTypes来限制结果集。这些方法中的每一个还有一个单数版本来在特定的成员上细化。
+
+MemberInfo对象有一个Name属性与两个Type属性：
+
+-  DeclaringType：返回定义成员的Type
+-  ReflectedType：返回在其上调用GetMembers的Type
+
+两者的区别体现在在其类型中定义的成员之上调用时：DeclaringType返回基类型，而ReflectedType返回子类型。下面的示例强调了这一点：
+
+.. code:: csharp
+
+    class Program
+    {
+      static void Main()
+      {
+        // MethodInfo is a subclass of MemberInfo; see Figure 18-1.
+        MethodInfo test = typeof (Program).GetMethod ("ToString");
+        MethodInfo obj  = typeof (object) .GetMethod ("ToString");
+        Console.WriteLine (test.DeclaringType);      // System.Object
+        Console.WriteLine (obj.DeclaringType);       // System.Object
+        Console.WriteLine (test.ReflectedType);      // Program
+        Console.WriteLine (obj.ReflectedType);       // System.Object
+        Console.WriteLine (test == obj);             // False
+      }
+    }
+
+因为他们有不同的ReflectedTypes，所以test与obj对象并不相等。然而他们的不同纯粹是反映API构成的不同；我们的Program类型在底层的类型系统中并没有单独的ToString方法。我们可以验证在两种方法中两个MethodInfo对象指向相同的方法：
+
+.. code:: csharp
+
+    Console.WriteLine (test.MethodHandle == obj.MethodHandle);    // True
+    Console.WriteLine (test.MetadataToken == obj.MetadataToken    // True
+                       && test.Module == obj.Module);
+
+MethodHandle对于程序域中的每一个方法是唯一的；MetadataToken对程序集模型中的所有类型与成员是唯一的。
+
+MemberInfo同时定义了返回自定义属性的方法。
+
+成员类型
+~~~~~~~~
+
+MemberInfo本身构建在成员之上，因为他是图18-1中所示的类型的抽象基类。
+
+.. figure:: csharp_18_1.png
+   :alt: csharp_18_1.png
+
+   csharp\_18\_1.png
+如果我们通过GetMethod，GetField，GetProperty，GetEvent，GetConstructor，或是GetNestedType（或是他们的复数版本）获得成员，则转换不是必须的。表18-1总结了对于每一种类别的C#构造使用哪种方法：
+
+|csharp\_table\_18\_1\_1.png| |csharp\_table\_18\_1\_2.png|
+
+每一个MemberInfo子类有很多的方法与属性，公开了成员元数据的所有方面。这其中包括可见性，修饰符，泛型类型参数，参数，返回类型以及自定义属性。
+
+下面是使用GetMethod的一个示例：
+
+.. code:: csharp
+
+    MethodInfo m = typeof (Walnut).GetMethod ("Crack");
+    Console.WriteLine (m);                             // Void Crack()
+    Console.WriteLine (m.ReturnType);                  // System.Void
+
+所有的\*Info实例会在第一次使用时为反射API缓存：
+
+.. code:: csharp
+
+    MethodInfo method = typeof (Walnut).GetMethod ("Crack");
+    MemberInfo member = typeof (Walnut).GetMember ("Crack") [0];
+    Console.Write (method == member);       // True
+
+与保留的对象标识一起，缓存改进了较慢API的性能。
+
+C#成员与CLR成员
+~~~~~~~~~~~~~~~
+
+前面的表格表现了某些C#功能构造与CLR构造之间并没有1:1的映射关系。这是可以理解的，因为CLR与反射API被设计为所有的.NET语言所用，我们甚至可以在Visual
+Basic中使用反射。
+
+某些C#构造－分别为索引器，枚举，操作符与清理器－与CLR的关注是相同的。特别是：
+
+-  C#索引器转换为接受一个或多个参数的属性，标识为类型的[DefalutMember]。
+-  C#枚举转换为System.Enum的一个子类型，对于每个成员使用一个静态域。
+-  C#操作符转换为特殊命名的静态方不地，以"op\_"开头；例如，"op\_Addition"。
+-  C#清理器转换为重写Finalize的方法。
+
+另一个复杂之处在于属性与事件实际上是由以下两点组成的：
+
+-  描述属性或事件（通过PropertyInfo或是EventInfo封装）的元数据
+-  一个或是两个后端方法
+
+在C#程序中，后端方法被封装在属性或事件定义中。但是当编译为IL时，后端方法就表示为我们可以调用的普通方法。这就意味着GetMethods会如同普通方法一样返回属性或事件的后端方法。如下所示：
+
+.. code:: csharp
+
+    class Test { public int X { get { return 0; } set {} } }
+    void Demo()
+    {
+      foreach (MethodInfo mi in typeof (Test).GetMethods())
+        Console.Write (mi.Name + "  ");
+    }
+    // OUTPUT:
+    get_X  set_X  GetType  ToString  Equals  GetHashCode
+
+我们可以通过MethodInfo中的IsSpecialName属性来标识这些方法。对于属性，索引器，事件访问以及操作符，IsSpecialName会返回true。他对于常规的C#方法以及Finalize方法则返回false。
+
+下面是C#所生成的后端方法：
+
+.. figure:: csharp_backingmethods.png
+   :alt: csharp_backingmethods.png
+
+   csharp\_backingmethods.png
+每一个后端方法都有一个相关联的MethodInfo对象。我们可以像下面这样进行访问：
+
+.. code:: csharp
+
+    PropertyInfo pi = typeof (Console).GetProperty ("Title");
+    MethodInfo getter = pi.GetGetMethod();                   // get_Title
+    MethodInfo setter = pi.GetSetMethod();                   // set_Title
+    MethodInfo[] both = pi.GetAccessors();                   // Length==2
+
+GetAddmethod与GetRemoveMethod为EventInfo执行类似的工作。
+
+要进入相反的方向－由MthodInfo到其关联的PropertyInfo或是EventInfo－我们需要需要执行查询。LINQ是此类工作的理想选择：
+
+.. code:: csharp
+
+    PropertyInfo p = mi.DeclaringType.GetProperties()
+                       .First (x => x.GetAccessors (true).Contains (mi));
+
+泛型类型参数
+~~~~~~~~~~~~
+
+我们可以同时为未绑定的与封闭的泛型类型获取成员元数据：
+
+.. code:: csharp
+
+    PropertyInfo unbound = typeof (IEnumerator<>)  .GetProperty ("Current");
+    PropertyInfo closed = typeof (IEnumerator<int>).GetProperty ("Current");
+    Console.WriteLine (unbound);   // T Current
+    Console.WriteLine (closed);    // Int32 Current
+    Console.WriteLine (unbound.PropertyType.IsGenericParameter);  // True
+    Console.WriteLine (closed.PropertyType.IsGenericParameter);   // False
+
+由未绑定的与封闭的泛型类型中所返回的MemberInfo对象总是不同的：
+
+.. code:: csharp
+
+    PropertyInfo unbound = typeof (List<>)  .GetProperty ("Count");
+    PropertyInfo closed = typeof (List<int>).GetProperty ("Count");
+    Console.WriteLine (unbound);   // Int32 Count
+    Console.WriteLine (closed);    // Int32 Count
+    Console.WriteLine (unbound == closed);   // False
+    Console.WriteLine (unbound.DeclaringType.IsGenericTypeDefinition); // True
+    Console.WriteLine (closed.DeclaringType.IsGenericTypeDefinition); // False
+
+未绑定泛型类型的成员不能被动态调用。
+
+动态调用成员
+~~~~~~~~~~~~
+
+一旦我们有了MemberInfo对象，我们就可以动态调用或是读取/设置其值。这被称为动态绑定或是后绑定，因为我们在运行时而不是在编译时选择要调用哪一个成员。
+
+为了进行演示，下面的代码使用普通的静态绑定：
+
+.. code:: csharp
+
+    string s = "Hello";
+    int length = s.Length;
+
+下面是使用反射动态执行的：
+
+.. code:: csharp
+
+    object s = "Hello";
+    PropertyInfo prop = s.GetType().GetProperty ("Length");
+    int length = (int) prop.GetValue (s, null);               // 5
+
+GetValue与SetValue读取或是设置PropertyInfo或是FieldInfo的值。第一个参数是实例，对于静态成员可以为null。访问索引器就类似于访问名为Item的属性，所不同的是当调用GetValaue或是SetValue时我们要为索引器提供值作为第二个参数。
+
+要动态调用一个方法，在MethodInfo上调用Invoke，提供传递给方法的参数数组。如果任意的参数类型错误，则会在运行时抛出异常。使用动态调用，我们丢失了编译时的类型安全，但是依然有运行时的类型安全（就如同dynamic关键字）。
+
+方法参数
+~~~~~~~~
+
+假定我们要动态调用string的Substring方法。静态时我们可以使用如下的代码：
+
+Console.WriteLine ("stamp".Substring(2)); // "amp"
+
+下面是使用反射的动态调用：
+
+.. code:: csharp
+
+    Type type = typeof (string);
+    Type[] parameterTypes = { typeof (int) };
+    MethodInfo method = type.GetMethod ("Substring", parameterTypes);
+    object[] arguments = { 2 };
+    object returnValue = method.Invoke ("stamp", arguments);
+    Console.WriteLine (returnValue);                           // "amp"
+
+因为Substring方法被重载了，我们必须向GetMethod方法传递一个参数类型数组来表明我们希望哪一个版本。如果没有参数类型，GetMethod会抛出AmbiguousMatchException。
+
+定义在MethodBase（MethodInfo与ConstructorInfo的基类）上的GetParameters方法返回参数元数据。我们可以继续我们前面的示例，如下所示：
+
+.. code:: csharp
+
+    ParameterInfo[] paramList = method.GetParameters();
+    foreach (ParameterInfo x in paramList)
+    {
+      Console.WriteLine (x.Name);                 // startIndex
+      Console.WriteLine (x.ParameterType);        // System.Int32
+    }
+
+**处理ref与out参数**
+
+要传递ref或是out参数，在获取方法之前在类型上调用MakeByRefType方法。例如下面的代码：
+
+.. code:: csharp
+
+    int x;
+    bool successfulParse = int.TryParse ("23", out x);
+
+可以动态执行如下：
+
+.. code:: csharp
+
+    object[] args = { "23", 0 };
+    Type[] argTypes = { typeof (string), typeof (int).MakeByRefType() };
+    MethodInfo tryParse = typeof (int).GetMethod ("TryParse", argTypes);
+    bool successfulParse = (bool) tryParse.Invoke (null, args);
+    Console.WriteLine (successfulParse + " " + args[1]);       // True 23
+
+同样的方法同时适用于ref与out参数类型。
+
+**获取与调用泛型方法**
+
+在调用GetMethod方法时显式指定参数类型可以有效避免重载方法的不确定性。然而，指定泛型参数类型是不可能的。例如，考虑System.Linq.Enumerable类，该类重载了Where方法，如下所示：
+
+.. code:: csharp
+
+    public static IEnumerable<TSource> Where<TSource>
+     (this IEnumerable<TSource> source, Func<TSource, bool> predicate);
+    public static IEnumerable<TSource> Where<TSource>
+     (this IEnumerable<TSource> source, Func<TSource, int, bool> predicate);
+
+要获取特定的重载，我们必须获取所有的方法然后手动查找所需要的重载。下面的查询获取前一个重载的Where：
+
+.. code:: csharp
+
+    from m in typeof (Enumerable).GetMethods()
+    where m.Name == "Where" && m.IsGenericMethod
+    let parameters = m.GetParameters()
+    where parameters.Length == 2
+    let genArg = m.GetGenericArguments().First()
+    let enumerableOfT = typeof (IEnumerable<>).MakeGenericType (genArg)
+    let funcOfTBool = typeof (Func<,>).MakeGenericType (genArg, typeof (bool))
+    where parameters[0].ParameterType == enumerableOfT
+       && parameters[1].ParameterType == funcOfTBool
+    select m
+
+在这个查询上调用.Single()可以返回具有未绑定参数类型的正确的MethodInfo对象。下一步是通过调用MakeGenericMethod来封闭类型参数：
+
+var closedMethod = unboundMethod.MakeGenericMethod (typeof (int));
+
+在这个示例中，我们使用int来封闭TSource，从而使得我们可以使用类型IEnumerable类型源以及Func类型预测来调用Enumerable.Where：
+
+.. code:: csharp
+
+    int[] source = { 3, 4, 5, 6, 7, 8 };
+    Func<int, bool> predicate = n => n % 2 == 1;   // Odd numbers only
+
+现在我们调用封闭的泛型方法，如下所示：
+
+.. code:: csharp
+
+    var query = (IEnumerable<int>) closedMethod.Invoke
+      (null, new object[] { source, predicate });
+    foreach (int element in query) Console.Write (element + "|");  // 3|5|7|
+
+使用委托改善性能
+~~~~~~~~~~~~~~~~
+
+动态调用效率相对较低，通常在毫秒级。如果我们在一个循环中重复调用方法，通过动态实例化一个指向我们动态方法的委托，我们就可以将每一次调用的花费降为纳秒级。在下面的示例中，我们动态调用string的Trim方法一百万次而没有性能负担：
+
+.. code:: csharp
+
+    delegate string StringToString (string s);
+    static void Main()
+    {
+      MethodInfo trimMethod = typeof (string).GetMethod ("Trim", new Type[0]);
+      var trim = (StringToString) Delegate.CreateDelegate
+                                        (typeof (StringToString), trimMethod);
+      for (int i = 0; i < 1000000; i++)
+        trim ("test");
+    }
+
+这样做速度较快，因为花费较大的动态绑定仅发生一次。
+
+访问非公开成员
+~~~~~~~~~~~~~~
+
+用于探测元数据的类型上的所有方法（例如GetProperty，GetField等）具有利用BindingFlags枚举的负载。这个枚举可以作为元数据过滤器，从而可以使得我们改变默认的选择条件。最通常的用法是来获取非公开成员。
+
+例如，考虑下面的类：
+
+.. code:: csharp
+
+    class Walnut
+    {
+      private bool cracked;
+      public void Crack() { cracked = true; }
+      public override string ToString() { return cracked.ToString(); }
+    }
+
+我们可以像下面这样来使用：
+
+.. code:: csharp
+
+    Type t = typeof (Walnut);
+    Walnut w = new Walnut();
+    w.Crack();
+    FieldInfo f = t.GetField ("cracked", BindingFlags.NonPublic |
+                                         BindingFlags.Instance);
+    f.SetValue (w, false);
+    Console.WriteLine (w);         // False
+
+使用反射来访问非公开成员非常强大，但是这也很危险，因为我们可以破坏封装，在类型的内部实现上创建非托管的依赖。
+
+**BindingFlags枚举**
+
+BindingFlags是可以位组合的。为了获得所有的匹配，我们需要使用下列四个组合中的一个来开始：
+
+.. code:: csharp
+
+    BindingFlags.Public    | BindingFlags.Instance
+    BindingFlags.Public    | BindingFlags.Static
+    BindingFlags.NonPublic | BindingFlags.Instance
+    BindingFlags.NonPublic | BindingFlags.Static
+
+非公开包括internal, protected, protected internal以及private。
+
+下面的示例获取类型object类型上的所有公开静态成员：
+
+.. code:: csharp
+
+    BindingFlags publicStatic = BindingFlags.Public | BindingFlags.Static;
+    MemberInfo[] members = typeof (object).GetMembers (publicStatic);
+
+下面的示例获取object类型上的所有非公开成员，包括静态与实例的：
+
+.. code:: csharp
+
+    BindingFlags nonPublicBinding =
+      BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    MemberInfo[] members = typeof (object).GetMembers (nonPublicBinding);
+
+DeclaredOnly排除了由基类型继承的函数，除非他们被重写。
+
+泛型方法
+~~~~~~~~
+
+泛型方法不能被直接调用；下面的代码会抛出异常：
+
+.. code:: csharp
+
+    class Program
+    {
+      public static T Echo<T> (T x) { return x; }
+      static void Main()
+      {
+        MethodInfo echo = typeof (Program).GetMethod ("Echo");
+        Console.WriteLine (echo.IsGenericMethodDefinition);    // True
+        echo.Invoke (null, new object[] { 123 } );             // Exception
+      }
+    }
+
+为了调用泛型方法，需要在MethodInfo上调用MakeGenericMethod方法，指定具体的泛型参数类型。这会返回另一个我们可以调用的MethodInfo，如下所示：
+
+.. code:: csharp
+
+    MethodInfo echo = typeof (Program).GetMethod ("Echo");
+    MethodInfo intEcho = echo.MakeGenericMethod (typeof (int));
+    Console.WriteLine (intEcho.IsGenericMethodDefinition);            // False
+    Console.WriteLine (intEcho.Invoke (null, new object[] { 3 } ));   // 3
+
+匿名调用泛型接口的成员
+~~~~~~~~~~~~~~~~~~~~~~
+
+当我们需要调用泛型接口的成员并且我们直到运行时才会知道类型参数时，反射十分有用。在理论上，如果类型进行完美设计，这种需要是不会出现的；当然，类型并不会总是进行完美设计。
+
+例如，假定我们希望编写一个更强大的ToString版本，他可以扩展LINQ查询的结果。我们可以编写如下的代码：
+
+.. code:: csharp
+
+    public static string ToStringEx <T> (IEnumerable<T> sequence)
+    {
+      ...
+    }
+
+这已经暴露不足了。如果sequence包含我们同时希望枚举的嵌入集合时怎么办呢？我们必须重载这个方法来进行处理：
+
+public static string ToStringEx (IEnumerable> sequence)
+
+如果sequence包含集合或是嵌入的sequence时时会怎么办呢？方法重载的静态解决方案变得不可能了，我们需要一种能够扩展来处理任意对象图的方法，例如下面的代码：
+
+.. code:: csharp
+
+    public static string ToStringEx (object value)
+    {
+      if (value == null) return "<null>";
+      StringBuilder sb = new StringBuilder();
+      if (value is List<>)                                            // Error
+        sb.Append ("List of " + ((List<>) value).Count + " items");   // Error
+      if (value is IGrouping<,>)                                      // Error
+        sb.Append ("Group with key=" + ((IGrouping<,>) value).Key);   // Error
+      // Enumerate collection elements if this is a collection,
+      // recursively calling ToStringEx()
+      // ...
+      return sb.ToString();
+    }
+
+不幸的是，上面的代码不能通过编译：我们不能调用类似List<>或是IGrouping<>这样的未绑定泛型类型的成员。在List<>的情况下，我们可以通过使用非泛型的IList接口来解决这一问题：
+
+.. code:: csharp
+
+      if (value is IList)
+        sb.AppendLine ("A list with " + ((IList) value).Count + " items");
+
+IGrouping<,>的解决则不是如此简单。下面是接口的定义：
+
+.. code:: csharp
+
+    public interface IGrouping <TKey,TElement> : IEnumerable <TElement>,
+                                                 IEnumerable
+    {
+      TKey Key { get; }
+    }
+
+我们并没有可以用来访问Key属性的非泛型类型，所以我们必须使用反射。解决方案并不是调用未绑定泛型类型的成员（这是不可能的），而是调用封闭泛型类型的成员，其类型参数是我们在运行时建立的。
+
+首先是确定value是否实现的IGrouping<,>，如果实现了，则获取其封闭泛型接口。通过LINQ查询我们可以很容易实现。然后我们获取并调用Key属性：
+
+.. code:: csharp
+
+    public static string ToStringEx (object value)
+    {
+      if (value == null) return "<null>";
+      if (value.GetType().IsPrimitive) return value.ToString();
+      StringBuilder sb = new StringBuilder();
+      if (value is IList)
+        sb.Append ("List of " + ((IList)value).Count + " items: ");
+      Type closedIGrouping = value.GetType().GetInterfaces()
+        .Where (t => t.IsGenericType &&
+                     t.GetGenericTypeDefinition() == typeof (IGrouping<,>))
+        .FirstOrDefault();
+      if (closedIGrouping != null)   // Call the Key property on IGrouping<,>
+      {
+        PropertyInfo pi = closedIGrouping.GetProperty ("Key");
+        object key = pi.GetValue (value, null);
+        sb.Append ("Group with key=" + key + ": ");
+      }
+      if (value is IEnumerable)
+        foreach (object element in ((IEnumerable)value))
+          sb.Append (ToStringEx (element) + " ");
+      if (sb.Length == 0) sb.Append (value.ToString());
+      return "\r\n" + sb.ToString();
+    }
+
+这种解决方法是健壮的：无论IGrouping<,>被隐式实现还是显式实现，该方法都可以适用。下面的示例演示了该方法：
+
+.. code:: csharp
+
+    Console.WriteLine (ToStringEx (new List<int> { 5, 6, 7 } ));
+    Console.WriteLine (ToStringEx ("xyyzzz".GroupBy (c => c) ));
+    List of 3 items: 5 6 7
+    Group with key=x: x
+    Group with key=y: y y
+    Group with key=z: z z z
+
+反射程序集
+----------
+
+我们可以通过在Assembly对象上调用GetType或是GetTypes动态反射程序集。下面的代码由Demos名字空间中的名为TestProgram的当前程序集获取信息：
+
+Type t = Assembly.GetExecutingAssembly().GetType ("Demos.TestProgram");
+
+下面的示例列出了e:\\demo中mylib.dll程序集中的所有类型：
+
+.. code:: csharp
+
+    Assembly a = Assembly.LoadFrom (@"e:\demo\mylib.dll");
+    foreach (Type t in a.GetTypes())
+      Console.WriteLine (t);
+
+GetTypes只返回顶层类型而不返回嵌套类型。
+
+将程序集载入到反射环境中
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+在前面的示例中，为了列出程序中的类型，我们将程序集载入到当前的程序域中。这会导致不希望的副作用，例如执行静态构造器或是子类型解析。如果我们仅是希望探测类型信息（而不实例化或调用类型），则解决方法是将程序集载入到反射环境中（reflection-only
+context）：
+
+.. code:: csharp
+
+    Assembly a = Assembly.ReflectionOnlyLoadFrom (@"e:\demo\mylib.dll");
+    Console.WriteLine (a.ReflectionOnly);   // True
+    foreach (Type t in a.GetTypes())
+      Console.WriteLine (t);
+
+这是编写类浏览器的起点。
+
+有三种方法可以将程序集载入到反射环境中：
+
+-  ReflectionOnlyLoad(byte[])
+-  ReflectionOnlyLoad(string)
+-  ReflectionOnlyLoadFrom(string)
+
+模块
+~~~~
+
+在一个多模块的程序集上调用GetTypes会返回所有模块中的所有类型。所以，我们可以忽略模块的存在，并将程序集看作一个类型的容器。然而有一个模型相关的特例－那就是当处理元数据标记的时候。
+
+元数据标记是在模块的作用范围内引用类型，成员，字符串或是资源的唯一整数。IL使用元数据标记，所以如果我们正解析IL，我们需要对元数据标记进行解析。执行这些操作的方法定义在Module类型中并且名为ResolveType，ResolveMember，ResolveString与ResolveSignature。我们会在本章的最后部分，编写程序集解析器时对这些方法进行探讨。
+
+我们可以通过调用GetModules获取程序集中所有模块的列表。我们也可以通过程序集的ManifestModule属性来直接访问其主模块。
+
+使用属性
+--------
+
+CLR允许通过属性向类型，成员以及程序集关联额外的元数据。这是许多CLR功能，例如序列化与安全所用的功能，使得属性成为程序不可分割的一部分。
+
+属性的一个关键特点是我们可以编写我们自己的属性，然后就如同使用其他的属性一样使用我们自己的属性并通过额外的信息来装饰代码元素。这种额外的信息可以被编译进底层的程序集中并且可以使用反射在运行时获取来构建声明式服务，例如自动化单元测试。
+
+属性基础
+~~~~~~~~
+
+有三种类型的属性：
+
+-  位映射属性
+-  自定义属性
+-  伪处自定义属性
+
+其中，只有自定义属性是可扩展的。
+
+位映射属性映射到类型的元数据中的专一位。大多数的C#修饰符关键字，例如public，abstract以及sealed被编译为位映射属性。这些属性非常高效，因为他们在元数据中只需要最少的空间（通常为一位），而CLR可以通过较少或是元需重定向来定位这些属性。反射API通过Type（以及其他的MemberInfo子类）上的专一属性来提供这些属性，例如IsPublic，IsAbstract以及IsSealed。Attributes属性返回一个描述大多数属性的标记枚举：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      TypeAttributes ta = typeof (Console).Attributes;
+      MethodAttributes ma = MethodInfo.GetCurrentMethod().Attributes;
+      Console.WriteLine (ta + "\r\n" + ma);
+    }
+
+其输出结果为：
+
+.. code:: csharp
+
+    AutoLayout, AnsiClass, Class, Public, Abstract, Sealed, BeforeFieldInit
+    PrivateScope, Private, Static, HideBySig
+
+相对应的，自定义属性被编译为类型的主元数据表中的一块。所有的自定主义属性通过System.Attribute的子类来表示，与位映射属性不同，自定义属性是不可扩展的。元数据中的块标识了属性类，同时存储了当提供属性时所指定的位置或是命名参数。我们自己所定义的自定义属性在体系结构上与.NET框架中所定义的自定义属性是相同的。
+
+第4章描述了如何向C#中的类型或是成员关联自定义属性。在这里，我们向Foo类关联一个预定义的Obsolete属性：
+
+[Obsolete] public class Foo {...}
+
+这会通知编译器向Foo的元数据中添加了一个ObsoleteAttribute实例，然后可以在运行时通过在Type或是MemberInfo对象上调用GetCustomAttributes进行反射。
+
+伪自定义属性看起来类似于标准的自定义属性。他们通过System.Attribute子类表示，并且以标准方式进行关联：
+
+[Serializable] public class Foo {...}
+
+区别在于编译器或是CLR在内部会通过将其转换为位映射属性来优化伪自定义属性。伪自定义属性的示例包括[Serializable]，StructLayout，In与Out。反射通过专一属性来公开伪自定义属性，例如IsSerializable，并且在许多情况下，当我们调用GetCustomeAttributes（包括SerializableAttribute）时，伪自定义属性也会作为Syste.Attribute对象返回。这就意味着我们可以忽略伪自定义属性与非伪自定义属性之间的区别。
+
+AttributeUsage属性
+~~~~~~~~~~~~~~~~~~
+
+AttributeUsage是一个应用在属性类上的属性。他告诉编译器目标属性应如何被使用：
+
+.. code:: csharp
+
+    public sealed class AttributeUsageAttribute : Attribute
+    {
+      public AttributeUsageAttribute (AttributeTargets validOn);
+      public bool AllowMultiple        { get; set; }
+      public bool Inherited            { get; set; }
+      public AttributeTargets ValidOn  { get; }
+    }
+
+AllowMultiple控制所定义的属性是否可以多次应用相同的目标上；Inherited控制属性是否可以被继承。ValidOn确定了属性可以被关联到的目标集合（类，接口，属性，方法，参数等）。他接受AttributeTargets枚举值的任意组合，其成员如下：
+
+.. code:: csharp
+
+    All Delegate GenericParameter Parameter
+    Assembly Enum Interface Property
+    Class Event Method ReturnValue
+    Constructor Field Module Struct
+
+为了进行演示，下面显示子.NET框架的作者如何向Serializable属性应用AttributeUsage：
+
+.. code:: csharp
+
+    [AttributeUsage (AttributeTargets.Delegate |
+                     AttributeTargets.Enum     |
+                     AttributeTargets.Struct   |
+                     AttributeTargets.Class,     Inherited = false)
+    ]
+    public sealed class SerializableAttribute : Attribute
+    {
+    }
+
+事实上，这是Serializable属性的完整定义。编写一个没有属性或是特殊构造器的属性类就是这样简章。
+
+定义我们自己的属性
+~~~~~~~~~~~~~~~~~~
+
+下面是我们如何编写我们自己的属性：
+
+#. 由System.Attribute或是System.Attribute的子孙类派生一个类。一般的约定时类名应以Attribute结尾，尽管这并不是必须的。
+#. 应用AttributeUsage属性，我们在前面进行了描述。如果属性在其构造器中并不需要属性或是参数，则工作就完成了。
+#. 编写一个或是多个公开的构造器。构造器的参数定义了属性的位置参数，并且当使用属性时会变为必须的。
+#. 为我们希望支持的每一个命名参数声明了一个公开的域或属性。当使用属性时命名参数是可选的。
+
+下面的类为辅助自动单元测试系统定义了一个属性。他表明了应被测试的方法，测试重复的次数，以及失败时的消息：
+
+.. code:: csharp
+
+    [AttributeUsage (AttributeTargets.Method)]
+    public sealed class TestAttribute : Attribute
+    {
+      public int     Repetitions;
+      public string  FailureMessage;
+      public TestAttribute () : this (1)     { }
+      public TestAttribute (int repetitions) { Repetitions = repetitions; }
+    }
+
+下面的Foo类以各种方式使用Test属性对方法进行修饰：
+
+.. code:: csharp
+
+    class Foo
+    {
+      [Test]
+      public void Method1() { ... }
+      [Test(20)]
+      public void Method2() { ... }
+      [Test(20, FailureMessage="Debugging Time!")]
+      public void Method3() { ... }
+    }
+
+运行时获取属性
+~~~~~~~~~~~~~~
+
+有两种标准方法可以在运行时获取属性：
+
+-  在任意的Type或是MemberInfo对象上调用GetCustomAttributes
+-  调用Attribute.GetCustomAttribute或是Attribute.GetCustomeAttributes
+
+后两种方法被重载来接受与正确的属性目标（Type，Assembly，Module，MemberInfo或是ParameterInfo）相对应的任意反射对象。
+
+下面的代码显示了如何枚举前面的具有TestAttribute的Foo类的方法：
+
+.. code:: csharp
+
+    foreach (MethodInfo mi in typeof (Foo).GetMethods())
+    {
+      TestAttribute att = (TestAttribute) Attribute.GetCustomAttribute
+        (mi, typeof (TestAttribute));
+      if (att != null)
+        Console.WriteLine ("Method {0} will be tested; reps={1}; msg={2}",
+                            mi.Name, att.Repetitions, att.FailureMessage);
+    }
+
+其输出结果如下：
+
+.. code:: csharp
+
+    Method Method1 will be tested; reps=1; msg=
+    Method Method2 will be tested; reps=20; msg=
+    Method Method3 will be tested; reps=20; msg=Debugging Time!
+
+为了完整演示我们如何用其来编写单元测试系统，下面是相同的示例扩展，从而他实际调用使用Test属性修饰的方法：
+
+.. code:: csharp
+
+    foreach (MethodInfo mi in typeof (Foo).GetMethods())
+    {
+      TestAttribute att = (TestAttribute) Attribute.GetCustomAttribute
+        (mi, typeof (TestAttribute));
+     
+      if (att != null)
+        for (int i = 0; i < att.Repetitions; i++)
+          try
+          {
+            mi.Invoke (new Foo(), null);    // Call method with no arguments
+          }
+          catch (Exception ex)       // Wrap exception in att.FailureMessage
+          {
+            throw new Exception ("Error: " + att.FailureMessage, ex);
+          }
+    }
+
+回到属性反射，下面是列出特定类型上属性的示例：
+
+.. code:: csharp
+
+    [Serializable, Obsolete]
+    class Test
+    {
+      static void Main()
+      {
+        object[] atts = Attribute.GetCustomAttributes (typeof (Test));
+        foreach (object att in atts) Console.WriteLine (att);
+      }
+    }
+
+其输出结果如下：
+
+.. code:: csharp
+
+    System.ObsoleteAttribute
+    System.SerializableAttribute
+
+在反射环境中获取属性
+~~~~~~~~~~~~~~~~~~~~
+
+在被载入到反射环境中的成员之上调用GetCustomeAttributes是被禁止的，因为这需要实例化任意的类型属性（记住在反射环境中对象实例化是不允许的）。为了解决这一问题，有一个名为CustomeAttributeData的特殊类型用来在这些属性上反射。下面是如何使用的一个示例：
+
+.. code:: csharp
+
+    IList<CustomAttributeData> atts = CustomAttributeData.GetCustomAttributes
+                                      (myReflectionOnlyType);
+    foreach (CustomAttributeData att in atts)
+    {
+      Console.Write (att.GetType());               // Attribute type
+      Console.WriteLine (" " + att.Constructor);   // ConstructorInfo object
+      foreach (CustomAttributeTypedArgument arg in att.ConstructorArguments)
+        Console.WriteLine ("  " +arg.ArgumentType + "=" + arg.Value);
+      foreach (CustomAttributeNamedArgument arg in att.NamedArguments)
+        Console.WriteLine ("  " + arg.MemberInfo.Name + "=" + arg.TypedValue);
+    }
+
+在许多情况下，属性类型将会位于不同于我们正在反射的另一个程序集中。一个解决方法就
+是在当前的程序域中处理ReflectionOnlyAssemblyResolve事件：
+
+.. code:: csharp
+
+    ResolveEventHandler handler = (object sender, ResolveEventArgs args)
+                                => Assembly.ReflectionOnlyLoad (args.Name);
+    AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += handler;
+    // Reflect over attributes...
+    AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve -= handler;
+
+动态代码生成
+------------
+
+System.Reflection.Emit名字空间包含在运行时创建元数据与IL的类。动态代码生成对于特定类型的程序任务十分有用。一个例子就是正则表达式API，他可以将表述类型转换为特定的正则表达式。框架中的其他Reflection.Emit的使用包括为远程动态生成透明代码以及使用最少的运行负载生成执行特定XSLT转换的类型。LINQPad使用Reflection.Emit动态生成类型DataContext类。
+
+使用DynamicMethod生成IL
+~~~~~~~~~~~~~~~~~~~~~~~
+
+DynamicMethod是System.Reflection.Emit名字空间中用于即时生成方法的一个轻量级工具。不同于TypeBuilder，他并不需要我们首先设置一个包含该方法的动态程序集，模块以及类型。这使得他适用于简章的任务－同时也承担介绍Reflection.Emit的任务。
+
+下面是使用DynamicMethod创建一个要控制台输出Hello world方法的简单示例：
+
+.. code:: csharp
+
+    public class Test
+    {
+      static void Main()
+      {
+        var dynMeth = new DynamicMethod ("Foo", null, null, typeof (Test));
+        ILGenerator gen = dynMeth.GetILGenerator();
+        gen.EmitWriteLine ("Hello world");
+        gen.Emit (OpCodes.Ret);
+        dynMeth.Invoke (null, null);                    // Hello world
+      }
+    }
+
+OpCodes对于每一个IL操作码有一个静态只读域。大多数功能是通过各种操作码来提供的，尽管ILGenerator具有用于生成标签与局部变量以及异常处理的特殊方法。方法总是以Opcodes.Ret结束，意味着"return"。ILGenerator上的EmitWriteLine方法是输出大量的底层操作码的简写。我们可以使用下面的代码来替换EmitWriteLine方法，而我们会获得相同的结果：
+
+.. code:: csharp
+
+    MethodInfo writeLineStr = typeof (Console).GetMethod ("WriteLine",
+                               new Type[] { typeof (string) });
+    gen.Emit (OpCodes.Ldstr, "Hello world");     // Load a string
+    gen.Emit (OpCodes.Call, writeLineStr);       // Call a method
+
+注意，我们向DynamicMethod的构造器传递了typeof(Test)。这可以使得动态方法访问类型的非公开方法，从而允许我们这样做：
+
+.. code:: csharp
+
+    public class Test
+    {
+      static void Main()
+      {
+        var dynMeth = new DynamicMethod ("Foo", null, null, typeof (Test));
+        ILGenerator gen = dynMeth.GetILGenerator();
+        MethodInfo privateMethod = typeof(Test).GetMethod ("HelloWorld",
+          BindingFlags.Static | BindingFlags.NonPublic);
+        gen.Emit (OpCodes.Call, privateMethod);     // Call HelloWorld
+        gen.Emit (OpCodes.Ret);
+        dynMeth.Invoke (null, null);                // Hello world
+      }
+      static void HelloWorld()       // private method, yet we can call it
+      {
+        Console.WriteLine ("Hello world");
+      }
+    }
+
+理解IL需要大量的时间。与理解全部的操作码不同，编译C#程序，然后检测，拷贝并调整IL要简单得多。程序集查看工作，例如ildasm或是Lutz
+Roeder的反映器适用于这种工作。
+
+计算栈
+~~~~~~
+
+IL的中心是计算栈（evaluation
+stack）的概念。计算栈不同于用来存储局部变量与方法参数的栈。
+
+要使用参数调用方法，我们首先将参数压入计算栈，然后调用方法。然后方法由栈中弹出他所需要的参数。我们在前面调用Console.WriteLine时演示了这一过程。下面是一个使用整数的类似例子：
+
+.. code:: csharp
+
+    var dynMeth = new DynamicMethod ("Foo", null, null, typeof(void));
+    ILGenerator gen = dynMeth.GetILGenerator();
+    MethodInfo writeLineInt = typeof (Console).GetMethod ("WriteLine",
+                                            new Type[] { typeof (int) });
+    // The Ldc* op-codes load numeric literals of various types and sizes.
+    gen.Emit (OpCodes.Ldc_I4, 123);        // Push a 4-byte integer onto stack
+    gen.Emit (OpCodes.Call, writeLineInt);
+    gen.Emit (OpCodes.Ret);
+    dynMeth.Invoke (null, null);           // 123
+
+要将两个数相加，我们首先将每一个数字载入到计算栈上，然后调用Add。Add操作码由计算栈上弹出两个值，然后将结果压入栈。下面的代码将2与2相加，然后使用writeLine方法输出结果：
+
+.. code:: csharp
+
+    gen.Emit (OpCodes.Ldc_I4, 2);           // Push a 4-byte integer, value=2
+    gen.Emit (OpCodes.Ldc_I4, 2);           // Push a 4-byte integer, value=2
+    gen.Emit (OpCodes.Add);                 // Add the result together
+    gen.Emit (OpCodes.Call, writeLineInt);
+
+要计算10/2+1，我们可以使用下面的方法：
+
+.. code:: csharp
+
+    gen.Emit (OpCodes.Ldc_I4, 10);
+    gen.Emit (OpCodes.Ldc_I4, 2);
+    gen.Emit (OpCodes.Div);
+    gen.Emit (OpCodes.Ldc_I4, 1);
+    gen.Emit (OpCodes.Add);
+    gen.Emit (OpCodes.Call, writeLineInt);
+
+或者：
+
+.. code:: csharp
+
+    gen.Emit (OpCodes.Ldc_I4, 1);
+    gen.Emit (OpCodes.Ldc_I4, 10);
+    gen.Emit (OpCodes.Ldc_I4, 2);
+    gen.Emit (OpCodes.Div);
+    gen.Emit (OpCodes.Add);
+    gen.Emit (OpCodes.Call, writeLineInt);
+
+向动态方法传递参数
+~~~~~~~~~~~~~~~~~~
+

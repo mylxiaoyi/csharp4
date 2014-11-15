@@ -1,0 +1,2432 @@
+Chapter 3. Creating Types in C#
+===============================
+
+在本章中，我们将会深入类型与类型成员。
+
+类
+--
+
+类是最常见的引用类型。最简单的类声明如下：
+
+.. code:: csharp
+
+    class YourClassName
+    {
+    }
+
+更为复杂的类可以包含下列内容：
+
+前缀关键字class：属性与类修饰符。非嵌入类的修饰符可以为public, internal,
+abstract, sealed, static, unsafe与partial
+
+后跟YourClassName：泛型类型参数，基类与接口
+
+在花括号内：
+类成员（方法，属性，索引器，事件，域，构造函数，操作符函数，嵌入类型以及清理器）
+
+本章将会探讨除属性，操作符函数以及unsafe关键字以外的所有结构。下面部分将会枚举每一个类成员。
+
+域
+~~
+
+域是类或是结构的成员变量。例如：
+
+.. code:: csharp
+
+    class Octopus
+    {
+      string name;
+      public int Age = 10;
+    }
+
+域可以使用下列修饰符：
+
+静态修饰符：static 访问修饰符：public internal private protected
+继承修饰符：new 不安全代码修饰符：unsafe 只读修饰符：readonly
+线程修饰符：volatile
+
+**只读修饰符**
+
+readonly修饰符可以阻止域在构造之后被改。只读域只可以在其声明中或是类型的构造函数中进行赋值。
+
+**域初始化**
+
+域初始化是可选的。未初始化的域具有默认值（0,\\0, null,
+false）。域初始化器在构造函数之前运行：
+
+public int Age = 10;
+
+**同时声明多个域**
+
+为了方便，我们可以在一个逗号分隔的列表中声明相同类型的多个域。这是一种使得所有的域共享相同的属性与域修饰符的方便方法：
+
+.. code:: csharp
+
+    static readonly int legs = 8,
+                        eyes = 1;
+
+方法
+~~~~
+
+方法以语句序列的方式执行动作。方法可以通过指定参数由调用者接收输入数据，通过指定返回类型向调用者返回输出数据。方法可以指定void返回类型，表明他并没有向其调用者返回任何值。方法同时可以通过ref/out参数向其调用者返回数据。
+
+方法的签名在类型中必须是唯一的。方法的签名由其名字与参数类型组成（但是不是的名字，也不是返回类型）。
+
+方法可以使用下列修饰符：
+
+静态修饰符：static 访问修饰符：public internal private protected
+继承修饰符：new virtual abstract override sealed
+非托管代码修饰符：unsafe extern
+
+**重载方法**
+
+类型可以重载方法（具有相同名字的多个方法），只要签名不同即可。例如，下面的方法可以在相同的类型中共存：
+
+.. code:: csharp
+
+    void Foo (int x);
+    void Foo (double x);
+    void Foo (int x, float y);
+    void Foo (float x, int y);
+
+然而下面的方法对不能在相同的类型中共存，因为返回类型与params修饰符并不是方法签名的一部分：
+
+.. code:: csharp
+
+    void  Foo (int x);
+    float Foo (int x);           // Compile-time error
+    void  Goo (int[] x);
+    void  Goo (params int[] x);  // Compile-time error
+
+**按值传递与按引用传递**
+
+参数是按值传递还是按引用传递也是方法签名的一部分。例如，Foot(int)可以与Foo(ref
+int)或是Foo(out int)共存。然而，Foo(ref int)与Foo(out int)不能共存：
+
+.. code:: csharp
+
+    void Foo (int x);
+    void Foo (ref int x);      // OK so far
+    void Foo (out int x);      // Compile-time error
+
+实例构造器
+~~~~~~~~~~
+
+构造器在类或是结构上运行初始化代码。构造器的定义类似于方法，所不同的时方法名与返回类型限制为类型的名字：
+
+.. code:: csharp
+
+    public class Panda
+    {
+      string name;                   // Define field
+      public Panda (string n)        // Define constructor
+      {
+        name = n;                    // Initialization code (set up field)
+      }
+    }
+    ...
+    Panda p = new Panda ("Petey");   // Call constructor
+
+构造器可以使用下列的修饰符：
+
+访问修饰符：public internal private protected 非托管代码修饰符：unsafe
+extern
+
+**重载构造器**
+
+类或是结构可以重载构造器。为了避免代码重复，一个构造器可以使用this关键字来调用另一个构造器：
+
+.. code:: csharp
+
+    using System;
+    public class Wine
+    {
+      public decimal Price;
+      public int Year;
+      public Wine (decimal price) { Price = price; }
+      public Wine (decimal price, int year) : this (price) { Year = year; }
+    }
+
+当一个构造器调用另一个构造器时，被调用的构造器首先执行。
+
+我们可以以如下方式将表达式传递给另一个构造器：
+
+.. code:: csharp
+
+    public Wine (decimal price, DateTime year) : this (price, year.Year) { }
+
+表达式本身不能使用this引用，例如，来调用一个实例方法。然而，他可以调用静态方法。
+
+**隐式无参数构造器**
+
+对于类，如果我们没有定义任何构造器，C#编译器就会自动生成一个无参数的构造器。然而，一旦我们定义了至少一个构造器，无参数的构造器就不再自动生成。
+
+对于结构，无参数构造器是结构所固有的；所以，我们不能定义自己的构造器。结构的隐式无参数构造器的角色就是使用默认值初始化所用域。
+
+**构造器与域初始化顺序**
+
+在前面，我们了解了在其声明中使用默认值初始化域：
+
+.. code:: csharp
+
+    class Player
+    {
+      int shields = 50;   // Initialized first
+      int health = 100;   // Initialized second
+    }
+
+域初始化发生在构造器执行之前，并且以域声明的顺序进行初始化。
+
+**非公开构造器**
+
+构造器并不需要是公开的。具有非公开构造器的一个通常原因是通过静态方法调用来控制实例创建。静态方法可以用来由一个池中返回对象，而不是必须创建一个新对象，或依据输入参数返回不同的子类。这种模式的模板如下：
+
+.. code:: csharp
+
+    public class Class1
+    {
+      Class1() {}                             // Private constructor
+      public static Class1 Create (...)
+      {
+        // Perform custom logic here to return an instance of Class1
+        ...
+      }
+    }
+
+对象初始化器
+~~~~~~~~~~~~
+
+为了简化对象的初始化，对象可访问的域或是属性可以在构造之后直接使用一条语句进行初始化。例如，考虑下面的类：
+
+.. code:: csharp
+
+    public class Bunny
+    {
+      public string Name;
+      public bool LikesCarrots;
+      public bool LikesHumans;
+      public Bunny () {}
+      public Bunny (string n) { Name = n; }
+    }
+
+使用对象初始化器，我们可以以下面的方式来实例化Bunny对象：
+
+.. code:: csharp
+
+    // Note parameterless constructors can omit empty parentheses
+    Bunny b1 = new Bunny { Name="Bo", LikesCarrots=true, LikesHumans=false };
+    Bunny b2 = new Bunny ("Bo")     { LikesCarrots=true, LikesHumans=false };
+
+构造了b1与b2的代码与前面的代码：
+
+.. code:: csharp
+
+    Bunny temp1 = new Bunny();    // temp1 is a compiler-generated name
+    temp1.Name = "Bo";
+    temp1.LikesCarrots = true;
+    temp1.LikesHumans = false;
+    Bunny b1 = temp1;
+    Bunny temp2 = new Bunny ("Bo");
+    temp2.LikesCarrots = true;
+    temp2.LikesHumans = false;
+    Bunny b2 = temp2;
+
+临时变量保证如果在初始化过程中抛出异常，我们就不会得到一个半初始化的对象。
+
+对象初始化器是在C# 3.0中引入的。
+
+this引用
+~~~~~~~~
+
+this引用指向实例本身。在下面的示例中，Marry方法使用this来调用partner的mate域：
+
+.. code:: csharp
+
+    public class Panda
+    {
+      public Panda Mate;
+      public void Marry (Panda partner)
+      {
+        Mate = partner;
+        partner.Mate = this;
+      }
+    }
+
+this引用同时可以明确区分局部变量与域中的参数。例如：
+
+.. code:: csharp
+
+    public class Test
+    {
+      string name;
+      public Test (string name) { this.name = name; }
+    }
+
+this引用只可以在类或结构的非静态方法中可用。
+
+属性（Property）
+~~~~~~~~~~~~~~~~
+
+属性在外面看来类似域，但是内部他们包含逻辑，类似方法。例如，通过下面的代码我们并不能分辨CurrentPrice是域还是属性：
+
+.. code:: csharp
+
+    Stock msft = new Stock();
+    msft.CurrentPrice = 30;
+    msft.CurrentPrice -= 3;
+    Console.WriteLine (msft.CurrentPrice);
+
+属性声明类似域，但是添加了get/set块。下面显示了如何将CurrentPrice实现为属性：
+
+.. code:: csharp
+
+    public class Stock
+    {
+      decimal currentPrice;           // The private "backing" field
+      public decimal CurrentPrice     // The public property
+      {
+        get { return currentPrice; } set { currentPrice = value; }
+      }
+    }
+
+get与set表示属性访问器。当读取属性时运行get访问器。他必须返回一个属性类型的值。当属性被赋值时运行set访问器。他有一个隐式的名为value的参数，我们通常将其赋值私有域。
+
+尽管属性以与域相同的方式进行访问，他们的不同在于前者为实现者提供了读取与设置值的完全控制。这种控制可以使得实现者选择在内部需要哪些表示，而不需要向属性的用户公开内部细节。在这个示例中，如果value超出了值的范围，则set方法就会抛出异常。
+
+属性可以使用下面的修饰符：
+
+静态修饰符：static 访问修饰符：public internal private protected
+继承修饰符：new virtual abstract override sealed
+非托管代码修饰符：unsafe extern
+
+**只读与计算属性**
+
+如果只指定了get访问器则属性是只读的，而如果只指定了set访问器则属性是只写的。只写的属性很少使用。
+
+属性通常有一个后端域来存储底层数据。然而，属性也可以由其他数据计算得到。例如：
+
+.. code:: csharp
+
+    decimal currentPrice, sharesOwned;
+    public decimal Worth
+    {
+      get { return currentPrice * sharesOwned; }
+    }
+
+**自动属性**
+
+属性的最通常实现是简单的读取与写入作为属性的相同类型的私有域的getter与setter。自动属性声明指示编译器提供这种实现。我们可以以下面的方式重新声明第一个示例：
+
+.. code:: csharp
+
+    public class Stock
+    {
+      ...
+      public decimal CurrentPrice { get; set; }
+    }
+
+编译器自动生成一个后端域，这是不可引用的编译器生成的名字。如果我们希望属性对于其他类型是只读的，set访问器可以被标识为private。自动属性是在C#
+3.0中引入的。
+
+**get与set可以访问性**
+
+get与set访问器可以具有不同的访问级别。通常的用法是将public属性指定了internal或是在setter上指定private访问修饰符：
+
+.. code:: csharp
+
+    public class Foo
+    {
+      private decimal x;
+      public decimal X
+      {
+        get         { return x;  }
+        private set { x = Math.Round (value, 2); }
+      }
+    }
+
+注意，我们使用更宽泛的访问级别（在这里为public）来声明了属性自身，然后向我们希望具有更少可访问性的访问器添加了修饰符。
+
+**CLR属性实现**
+
+C#属性访问器在内部被编译为名为get\_XXX与set\_XXX的方法：
+
+.. code:: csharp
+
+    public int  get_CurrentPrice {...}
+    public void set_CurrentPrice (decimal value) {...}
+
+简单的非虚属性访问器被JIT编译器编译为内联的，从而减少了访问属性与访问域之间的性能区别。内联是一种优化，其中方法调用被方法体所代替。
+
+索引器
+~~~~~~
+
+索引器提供了一种自然的语法来访问类或是结构中的元素，该类或是结构封装了一个值的列表或是字典。索引器类似于属性，但是通过索引参数而不是属性名字来访问。string有一个索引器从而使得我们可以通过int索引来访问其中每一个char值：
+
+.. code:: csharp
+
+    string s = "hello";
+    Console.WriteLine (s[0]); // 'h'
+    Console.WriteLine (s[3]); // 'l'
+
+当索引为整数类型时，使用索引器的语法类似于使用数组的语法。
+
+**实现索引器**
+
+要编写一个索引器，定义一个名为this的属性，在括号中指定参数。例如：
+
+.. code:: csharp
+
+    class Sentence
+    {
+      string[] words = "The quick brown fox".Split();
+      public string this [int wordNum]      // indexer
+      {
+        get { return words [wordNum];  }
+        set { words [wordNum] = value; }
+      }
+    }
+
+下面是我们如何使用这个索引器：
+
+.. code:: csharp
+
+    Sentence s = new Sentence();
+    Console.WriteLine (s[3]);       // fox
+    s[3] = "kangaroo";
+    Console.WriteLine (s[3]);       // kangaroo
+
+一个类型可以定义多个索引器，每一个使用不同类型的参数。一个索引器也可以有多个参数：
+
+.. code:: csharp
+
+    public string this [int arg1, string arg2]
+    {
+      get { ... }  set { ... }
+    }
+
+如果我们忽略set访问器，则索引器就变为只读的了。
+
+**CLR索引器实现**
+
+索引器在内部编译为名为get\_Item与set\_Item的方法，如下所示：
+
+.. code:: csharp
+
+    public string get_Item (int wordNum) {...}
+    public void set_Item (int wordNum, string value) {...}
+
+编译器默认选择Item作为名字－实际上我们可以使用下面的属性通过修饰我们的索引器来进行修改：
+
+[System.Runtime.CompilerServices.IndexerName ("Blah")]
+
+常量
+~~~~
+
+常量是其值不能变化的域。常量是在编译时静态计算的，并且编译器在使用时在字面上替换该值，类似于C++中的宏。常量可以是任何的内建数值类型，bool，char，string或是枚举类型。
+
+常量是通过const关键字来声明的，并且必须使用值进行初始化。例如：
+
+.. code:: csharp
+
+    public class Test
+    {
+      public const string Message = "Hello World";
+    }
+
+常量要比static
+readonly域的限制严格得多－同时在我们可以使用的类型以及域初始化语义两个方面。常量不同于static
+readonly域的另一个方面就是常量的计算发生在编译时。例如：
+
+.. code:: csharp
+
+    public static double Circumference (double radius)
+    {
+      return 2 * System.Math.PI * radius;
+    }
+
+被编译为：
+
+.. code:: csharp
+
+    public static double Circumference (double radius)
+    {
+      return 6.2831853071795862 * radius;
+    }
+
+将PI定义为常量是有道理的，因为他绝不会发生变化。相对应的，static
+readonly域在每个不同的程序中会具有不同的值。
+
+常量还可以声明为局限于方法。例如：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      const double twoPI  = 2 * System.Math.PI;
+      ...
+    }
+
+常量可以使用下列的修饰符：
+
+访问修饰符：public internal private protected 继承修饰符：new
+
+**静态构造器**
+
+静态构造器对于每个类型只执行一次，而不是每个实例执行一次。一个类型只可以定义一个静态构造器，且他必须是无参数的，而且与类型具有相同的名字：
+
+.. code:: csharp
+
+    class Test
+    {
+      static Test() { Console.WriteLine ("Type Initialized"); }
+    }
+
+运行时会在类型使用之前自动调用静态构造器。两件事情可以触发调用：
+
+-  实例化类型
+-  访问类型中的静态成员
+
+静态构造器只可以使用的修饰符为unsafe与extern。
+
+静态构造器与域初始化顺序
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+静态域初始化器在静态构造器调用之前运行。如果一个类型没有静态构造器，域初始化器会在类型被使用之前执行。（这就意味着静态构造器的存在也许会使得域初始化器在程序中的运行晚于他们本来的运行时机。）
+
+静态域初始化器以域被声明的顺序进行初始化。下面的代码演示了这一点：X被初始化0而Y被初始化为3。
+
+.. code:: csharp
+
+    class Foo
+    {
+      public static int X = Y;    // 0
+      public static int Y = 3;    // 3
+    }
+
+如果我们交换两个域初始化器的顺序，则两个域都被初始化为3。下面的程序会输出0，然后是3，因为实例化Foo的域初始化器在X被初始化为3之前执行：
+
+.. code:: csharp
+
+    class Program
+    {
+      static void Main() { Console.WriteLine (Foo.X); }   // 3
+    }
+    class Foo
+    {
+      public static Foo Instance = new Foo();
+      public static int X = 3;
+      Foo() { Console.WriteLine (X); }   // 0
+    }
+
+如果我们交换两行代码的顺序，则示例会输入3 3。
+
+静态类
+~~~~~~
+
+一个类可以标记为static，表明该类由静态成员组成并且不能被继承。System.Console与System.Math类就是静态类的好例子。
+
+清理器
+~~~~~~
+
+清理器是类方法，该方法会在垃圾收集器回未被引用的对象的内存之前执行。清理器的语法是以~符号为前缀的类名字：
+
+.. code:: csharp
+
+    class Class1
+    {
+      ~Class1()
+      {
+        ...
+      }
+    }
+
+这实际上是C#重写Object的Finalize方法的语法，而编译器会将其扩展为下面的方法声明：
+
+.. code:: csharp
+
+    protected override void Finalize()
+    {
+      ...
+      base.Finalize();
+    }
+
+我们将会在第12章详细讨论垃圾收集。
+
+清理器允许使用下面的修饰符：
+
+非托管代码修饰符：unsafe
+
+部分（partial）类型与方法
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+部分类型允许类型的声明可以被分开－通常跨越多个文件。一个常见的应用场景就是由其他的源（例如XSD）自动生成的部分类以及使用额外的手动编写方法作为参数的类所形成的部分类。例如：
+
+.. code:: csharp
+
+    // PaymentFormGen.cs - auto-generated
+    partial class PaymentForm { ... }
+    // PaymentForm.cs - hand-authored
+    partial class PaymentForm { ... }
+
+每一部分必须有partial声明；下面的代码是非法的：
+
+.. code:: csharp
+
+    partial class PaymentForm {}
+    class PaymentForm {}
+
+部分不能有冲突的成员。例如，使用相同参数的构造器不可以重复。部分类型是由编译器进行整体解析的，这就意味着每一部分必须在编译时是可用的，而且必须位于相同的程序集中。
+
+有两种方法来指定使用部分类的基类：
+
+-  在每一部分指定相同的基类。例如：
+
+ partial class PaymentForm : ModalForm {} partial class PaymentForm :
+ModalForm {}
+
+.. raw:: html
+
+   </syntaxhighlight>
+
+-  只在其中一部分指定基类。例如：
+
+.. code:: csharp
+
+    partial class PaymentForm : ModalForm {}
+    partial class PaymentForm {}
+
+另外，每部分都可以独立指定要实现的接口。
+
+**部分方法**
+
+一个部分类型可以包含部分方法。这可以使得一个自动生成的部分类型为手动编写的代码提供可以自定义的钩子。例如：
+
+.. code:: csharp
+
+    partial class PaymentForm    // In auto-generated file
+    {
+      ...
+      partial void ValidatePayment (decimal amount);
+    }
+    partial class PaymentForm    // In hand-authored file
+    {
+      ...
+      partial void ValidatePayment (decimal amount)
+      {
+        if (amount > 100)
+          ...
+      }
+    }
+
+一个部分方法由两部分组成：定义与实现。定义通常是由代码生成器所编写的，而实现通常是手动编写的。如果没有提供实现，部分方法的定义就会被编译去掉。这可以使得自动生成的代码自由提供关联，而不需要担心代码的膨胀。部分方法必须是void且隐式为private。
+
+部分方法是在C# 3.0中引入的。
+
+继承
+----
+
+一个类可以由其他类继承来扩展或是自定义原始类。由一个类继承可以使得我们重用那个类中的功能而不是从头开始构建。一个类只能由一个类继承，但是他本身可以由多个类继承，从而形成类的层次结构。在这个示例中，我们由定义一个名为Asset的类开始：
+
+.. code:: csharp
+
+    public class Asset
+    {
+      public string Name;
+    }
+
+接下来我们定义名为Stock与House的类，这两个类由Asset继承。他们拥有Asset类所有的所有成员，并加上他们定义的额外成员：
+
+.. code:: csharp
+
+    public class Stock : Asset   // inherits from Asset
+    {
+      public long SharesOwned;
+    }
+
+    public class House : Asset   // inherits from Asset
+    {
+      public decimal Mortgage;
+    }
+
+下面的代码显示了我们如何使用这些类：
+
+.. code:: csharp
+
+    Stock msft = new Stock { Name="MSFT",
+                             SharesOwned=1000 };
+    Console.WriteLine (msft.Name);         // MSFT
+    Console.WriteLine (msft.SharesOwned);  // 1000
+    House mansion = new House { Name="Mansion",
+                                Mortgage=250000 };
+    Console.WriteLine (mansion.Name);      // Mansion
+    Console.WriteLine (mansion.Mortgage);  // 250000
+
+子类，Stock与House，由基类Asset继承了Name属性。
+
+多态
+~~~~
+
+引用是多态的。这就意味着类型x的一个变量可以指向继承x的对象。例如，考虑下面的方法：
+
+.. code:: csharp
+
+    public static void Display (Asset asset)
+    {
+      System.Console.WriteLine (asset.Name);
+    }
+
+这个可以方法可以同时显示Stock与House，因为他们都是Asset：
+
+.. code:: csharp
+
+    Stock msft    = new Stock ... ;
+    House mansion = new House ... ;
+    Display (msft);
+    Display (mansion);
+
+多态的运行是建立在子类（Stock与House）具有基类（Asset）所有特性的基础上的。然而，相反的情况并不正确。如果修改Display来接受House，我们就不能传递进Asset：
+
+.. code:: csharp
+
+    static void Main() { Display (new Asset()); }    // Compile-time error
+    public static void Display (House house)         // Will not accept Asset
+    {
+      System.Console.WriteLine (house.Mortgage);
+    }
+
+转换与引用转换
+~~~~~~~~~~~~~~
+
+一个对象引用可以：
+
+-  隐式向上转换为基类引用
+-  显式向下转换为子类引用
+
+兼容引用类型之间的向上转换与向下转换执行引用转换：创建一个指向相同对象的新引用。向上转换总是会成功；只有当对象是合适的类型时向下转换才会成功。
+
+**向上转换**
+
+向上转换操作由子类引用创建一个基类引用。例如：
+
+.. code:: csharp
+
+    Stock msft = new Stock();
+    Asset a = msft;              // Upcast
+
+在向上转换之后，变量a仍然与变量msft指向相同的Stock对象。引用所指向的对象本身并没有被修改或是转换：
+
+.. code:: csharp
+
+    Console.WriteLine (a == msft);        // True
+
+尽管a与msft指向相同的对象，但是a在对象上只有有限的视野：
+
+.. code:: csharp
+
+    Console.WriteLine (a.Name);           // OK
+    Console.WriteLine (a.SharesOwned);    // Error: SharesOwned undefined
+
+最后一行代码会生成编译时错误，因为变量a是Asset类型的，尽管他指向Stock类型的对象。要获得其SharedOwned域，我们将Asset向下转换为Stock。
+
+**向下转换**
+
+向下转换操作由基类引用创建一个子类引用。例如：
+
+.. code:: csharp
+
+    Stock msft = new Stock();
+    Asset a = msft;                      // Upcast
+    Stock s = (Stock)a;                  // Downcast
+    Console.WriteLine (s.SharesOwned);   // <No error>
+    Console.WriteLine (s == a);          // True
+    Console.WriteLine (s == msft);       // True
+
+与向上转换类似，转换只影响引用，而不是底层的对象。向下转换需要显式进行，因为在运行向下转换很可能会失败：
+
+.. code:: csharp
+
+    House h = new House();
+    Asset a = h;               // Upcast always succeeds
+    Stock s = (Stock)a;        // Downcast fails: a is not a Stock
+
+如果向下转换失败，则会抛出InvalidCastException。
+
+**as操作符**
+
+as操作符执行向下转换，如果向下转换失败，则计算为null（而不是抛出异常）：
+
+.. code:: csharp
+
+    Asset a = new Asset();
+    Stock s = a as Stock;       // s is null; no exception thrown
+
+当我们在接下来要测试结果是否为null，as操作符就会十分有用：
+
+.. code:: csharp
+
+    if (s != null) Console.WriteLine (s.SharesOwned);
+
+as操作符不能执行自定义转换，并且他不能执行数值转换：
+
+long x = 3 as long; // Compile-time error
+
+**is操作**
+
+is操作符测试引用转换是否成功；换句话说，测试一个对象是否由一个特定的类派生（或是实现接口）。他通常用于在进行向下转换之前测试：
+
+.. code:: csharp
+
+    if (a is Stock)
+      Console.WriteLine (((Stock)a).SharesOwned);
+
+is操作符并没有考虑处碹义或是数值转换，但是他却考虑了拆箱转换。
+
+虚函数成员
+~~~~~~~~~~
+
+标记为virtual的函数可以由希望提供特定实现的子类来重写。方法，属性，索引器与事件都可以声明为virtual：
+
+.. code:: csharp
+
+    public class Asset
+    {
+      public string Name;
+      public virtual decimal Liability { get { return 0; } }
+    }
+
+子类通过应用override修饰符来重写虚方法：
+
+.. code:: csharp
+
+    public class Stock : Asset
+    {
+      public long SharesOwned;
+    }
+    public class House : Asset
+    {
+      public decimal Mortgage;
+      public override decimal Liability { get { return Mortgage; } }
+    }
+
+默认情况下，Asset的Liability为0。Stock并不需要特例化此行为。然而，House特例化Liability属性来返回Mortgage的值：
+
+.. code:: csharp
+
+    House mansion = new House { Name="McMansion", Mortgage=250000 };
+    Console.WriteLine (mansion.Liability);      // 250000
+
+签名，返回类型，以及虚方法与重写方法的可访问性必须相同。重写方法可以通过base关键字来调用其基类实现。
+
+抽象类与抽象成员
+~~~~~~~~~~~~~~~~
+
+声明为abstract的类不能被实例化。相反，只有其子类可以被实例铧。
+
+抽象类可以来定义抽象成员。抽象成员类似于虚成员，所不同的是他们并不提供默认实现。该实现必须由子类来提供，除非子类也被声明为抽象的：
+
+.. code:: csharp
+
+    public abstract class Asset
+    {
+      // Note empty implementation
+      public abstract decimal NetValue { get; }
+    }
+    public class Stock : Asset
+    {
+      public long SharesOwned;
+      public decimal CurrentPrice;
+      // Override like a virtual method.
+      public override decimal NetValue
+      {
+        get { return CurrentPrice * SharesOwned; }
+      }
+    }
+
+隐藏继承成员
+~~~~~~~~~~~~
+
+基类和子类可以定义相同的成员。例如：
+
+.. code:: csharp
+
+    public class A      { public int Counter = 1; }
+    public class B : A  { public int Counter = 2; }
+
+类B中的Counter域被称之为隐藏了类A中的Counter域。通常，这是当一个成员被添加到基类中然后一个相同的成员被添加到子类时偶然发生的。由于这个原因，编译器会生成警告，然后使用下面的方式解决不确定性：
+
+-  到A的引用（在编译时）绑定到A.Counter
+-  到B的引用（在编译时）绑定到B.Counter
+
+有时我们希望故意的隐藏成员，在这种情况下我们可以在子类的成员上应用new修饰符。new修饰的作用就是本来会产生的编译器警告：
+
+.. code:: csharp
+
+    public class A     { public     int Counter = 1; }
+    public class B : A { public new int Counter = 2; }
+
+new修饰符将我们的意图告知编译器—以及其他程序－重复的成员并不是偶然产生的。
+
+**new与virtual**
+
+考虑下面的类层次结构：
+
+.. code:: csharp
+
+    public class BaseClass
+    {
+      public virtual void Foo()  { Console.WriteLine ("BaseClass.Foo"); }
+    }
+    public class Overrider : BaseClass
+    {
+      public override void Foo() { Console.WriteLine ("Overrider.Foo"); }
+    }
+    public class Hider : BaseClass
+    {
+      public new void Foo()      { Console.WriteLine ("Hider.Foo"); }
+    }
+
+Overrider与Hider行为之间的区别在下面的代码中进行演示：
+
+.. code:: csharp
+
+    Overrider over = new Overrider();
+    BaseClass b1 = over;
+    over.Foo();                         // Overrider.Foo
+    b1.Foo();                           // Overrider.Foo
+    Hider h = new Hider();
+    BaseClass b2 = h;
+    h.Foo();                           // Hider.Foo
+    b2.Foo();                          // BaseClass.Foo
+
+密封函数与方法
+~~~~~~~~~~~~~~
+
+一个重写的函数成员可以使用sealed关键字密封其实现从而防止被子类进行重写。在我们前面虚函数成员的示例中，我们可以密封Liability的House实现，从而防止由House派生的类重写Liability，如下所示：
+
+public sealed override decimal Liability { get { return Mortgage; } }
+
+我们还可以通过在类本身上应用sealed修饰符来密封类本身，隐式密封所有的虚函数。密封一个类要比密封一个成员函数更为常见。
+
+base关键字
+~~~~~~~~~~
+
+base关键字类似于this关键字。他有两个目的：
+
+-  由子类访问重写的函数成员
+-  调用基类的构造器
+
+在这个示例中，House使用base关键字来访问Liability的Asset实现：
+
+.. code:: csharp
+
+    public class House : Asset
+    {
+      ...
+      public override decimal Liability
+      {
+        get { return base.Liability + Mortgage; }
+      }
+    }
+
+通过base关键字，我们可以非虚拟的方式访问Asset的Liability属性。这就意味着我们总是可以访问这个属性的Asset版本，而无论实例的实际运行时类型。
+
+相同的方法同样适用于Liability被隐藏而是被重写。（我们也可以通过在调用这个函数之前转换为基类来访问隐藏成员。）
+
+构造器与继承
+~~~~~~~~~~~~
+
+子类必须声明其自己的构造器。例如，如果我们以下面的方式定义Subclass：
+
+.. code:: csharp
+
+    public class Baseclass
+    {
+      public int X;
+      public Baseclass () { }
+      public Baseclass (int x) { this.X = x; }
+    }
+    public class Subclass : Baseclass { }
+
+则下面的代码是非法的：
+
+Subclass s = new Subclass (123);
+
+子类必须重新定义他希望公开的构造器。然而，如果这样做，他就可以通过base关键字来调用基类的构造器：
+
+.. code:: csharp
+
+    public class Subclass : Baseclass
+    {
+      public Subclass (int x) : base (x) { }
+    }
+
+base关键字的作用类似于this关键字，所不同的是他调用基类中的构造器。
+
+基类的构造器总是首先执行；这可以保证基类的初始化在特例的初始化之前。
+
+**隐式调用基类的无参数构造器**
+
+如果子类中的构造器忽略了base关键，则基类类型的无参数构造器就会隐式调用：
+
+.. code:: csharp
+
+    public class BaseClass
+    {
+      public int X;
+      public BaseClass() { X = 1; }
+    }
+    public class Subclass : BaseClass
+    {
+      public Subclass() { Console.WriteLine (X); }  // 1
+    }
+
+如果基类没有无参数的构造器，则子类就会被强制在其构造器中使用base关键字。
+
+**构造器与域初始化顺序**
+
+当一个对象被实例化时，初始化以下面的顺序发生：
+
+#. 由子类到基类：
+
+-  
+
+   -  域初始化
+
+#. 由基类到子类：
+
+-  
+
+   -  执行构造器体
+
+如下面的代码所示：
+
+.. code:: csharp
+
+    public class B
+    {
+      int x = 0;         // Executes 3rd
+      public B (int x)
+      {
+        ...              // Executes 4th
+      }
+    }
+    public class D : B
+    {
+      int y = 0;         // Executes 1st
+      public D (int x)
+        : base (x + 1)   // Executes 2nd
+      {
+         ...             // Executes 5th
+      }
+    }
+
+重载与解析
+~~~~~~~~~~
+
+继承对于方法重载有一个有趣的影响。考虑下面的两个重载：
+
+.. code:: csharp
+
+    static void Foo (Asset a) { }
+    static void Foo (House h) { }
+
+当重载被调用时，最特殊的类型具有高优先级：
+
+.. code:: csharp
+
+    House h = new House (...);
+    Foo(h);                      // Calls Foo(House)
+
+要调用的特定重载是静态确定的（在编译时）而不是运行时确定的。下面的代码调用Foo(Asset)，尽管其运行时类型为House：
+
+.. code:: csharp
+
+    Asset a = new House (...);
+    Foo(a);                      // Calls Foo(Asset)
+
+object类型
+----------
+
+object（System.Object）是所有类型的最终基类。任意的类型都可以向上转换为object。
+
+为了演示这是如何有用，考虑通常目的的栈。栈是基于LIFO原则的数据结构。栈有两个操作：push一个对象到栈，以及由栈中pop一个对象。下面是一个可以存储10个对象的简单实现：
+
+.. code:: csharp
+
+    public class Stack
+    {
+      int position;
+      object[] data = new object[10];
+      public void Push (object obj)   { data[position++] = obj;  }
+      public object Pop()             { return data[--position]; }
+    }
+
+因为Stack使用object类型，我们可以向Stack或是由Stack中Push或Pop任意的类型实例：
+
+.. code:: csharp
+
+    Stack stack = new Stack();
+    stack.Push ("sausage");
+    string s = (string) stack.Pop();   // Downcast, so explicit cast is needed
+    Console.WriteLine (s);             // sausage
+
+object是一个引用类型。尽管这样，值类型，例如int，可以转换为object或是由object转换，因而也可以添加到我们的栈中。C#的这种特性被称为类型一致，如下所示：
+
+.. code:: csharp
+
+    stack.Push (3);
+    int three = (int) stack.Pop();
+
+当我们在值类型与object之间进行转换时，CLR必须执行一些特殊的工作来连接值类型与引用类型之间语义上的区别。这个过程就称之为装箱与拆箱。
+
+装箱与拆箱
+~~~~~~~~~~
+
+装箱就是将值类型的实例转换为引用类型实例的。引用类型可以是object类或是一个接口。在这个示例中，我们将int装箱为一个对象：
+
+.. code:: csharp
+
+    int x = 9;
+    object obj = x;           // Box the int
+
+拆箱是相反的操作，将对象转换为原始的值类型：
+
+int y = (int)obj; // Unbox the int
+
+拆箱需要显示转换。运行时会检测所表述的值类型是否与实际的对象类型相匹配，如果检测失败则会抛出InvalidCastException。例如，下面的代码会抛出异常，因为long与int不匹配：
+
+.. code:: csharp
+
+    object obj = 9;           // 9 is inferred to be of type int
+    long x = (long) obj;      // InvalidCastException
+
+然而下面的代码可以成功：
+
+.. code:: csharp
+
+    object obj = 9;
+    long x = (int) obj;
+
+下面的代码也可以：
+
+.. code:: csharp
+
+    object obj = 3.5;              // 3.5 is inferred to be of type double
+    int x = (int) (double) obj;    // x is now 3
+
+在最后一个示例中，(double)执行拆箱，而(int)执行数值转换。
+
+**装箱与拆箱的拷贝语义**
+
+装箱将值类型的实例拷贝到新对象中，而拆箱则是将对象的内容拷贝回值类型实例中。在下面的示例中，修改i的值并不会改变之前的装箱拷贝：
+
+.. code:: csharp
+
+    int i = 3;
+    object boxed = i;
+    i = 5;
+    Console.WriteLine (boxed);    // 3
+
+静态与运行时类型检测
+~~~~~~~~~~~~~~~~~~~~
+
+C#同时静态（在编译时）与运行时检测类型。
+
+静态类型检测使得编译器无需要运行来验证我们程序的正确性。下面的代码会失败，因为编译会强制静态类型：
+
+int x = "5";
+
+当我们通过引用转换或是拆箱进行向下转换时，由CLR进行运行类型检测。例如：
+
+.. code:: csharp
+
+    object y = "5";
+    int z = (int) y;          // Runtime error, downcast failed
+
+之所以可以进行运行时类型检测是因为堆上的每一个对象在内部都存储一个类型标记。这个标记可以通过调用object的GetType方法来获取。
+
+GetType方法与typeof操作符
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+C#中的所有类型在运行时都是通过System.Type来表示的。有两种基本方法来获取System.Type对象：
+
+-  在实例上调用GetType
+-  在类型名字上使用typeof操作符
+
+GetType是在运行时评估的；typeof是在编译时静态评估的。
+
+System.Type具有的属性包括类型的名字，程序集，基类型等。例如：
+
+.. code:: csharp
+
+    using System;
+    public class Point { public int X, Y; }
+    class Test
+    {
+      static void Main()
+      {
+        Point p = new Point();
+        Console.WriteLine (p.GetType().Name);             // Point
+        Console.WriteLine (typeof (Point).Name);          // Point
+        Console.WriteLine (p.GetType() == typeof(Point)); // True
+        Console.WriteLine (p.X.GetType().Name);           // Int32
+        Console.WriteLine (p.Y.GetType().FullName);       // System.Int32
+      }
+    }
+
+System.Type同时包含一些扮演运行时反映模型入口的方法，我们会在第17章中描述。
+
+ToString方法
+~~~~~~~~~~~~
+
+ToString方法返回类型实例的默认文本表示。这个方法会为所有的内建类型所重写。下面是使用int类型的ToString方法的示例：
+
+.. code:: csharp
+
+    int x = 1;
+    string s = x.ToString();     // s is "1"
+
+我们可以在自定义类型上重写ToString方法，如下所示：
+
+.. code:: csharp
+
+    public class Panda
+    {
+      public string Name;
+      public override string ToString() { return Name; }
+    }
+    ...
+    Panda p = new Panda { Name = "Petey" };
+    Console.WriteLine (p);   // Petey
+
+当我们直接在值类型上调用重写的object成员，例如ToString方法时，不会产生装箱操作。只有当我们转换时才会产生装箱操作：
+
+.. code:: csharp
+
+    int x = 1;
+    string s1 = x.ToString();    // Calling on nonboxed value
+    object box = x;
+    string s2 = box.ToString();  // Calling on boxed value
+
+object成员列表
+~~~~~~~~~~~~~~
+
+下面是object的所有成员：
+
+.. code:: csharp
+
+    public class Object
+    {
+      public Object();
+      public extern Type GetType();
+      public virtual bool Equals (object obj);
+      public static bool Equals  (object objA, object objB);
+      public static bool ReferenceEquals (object objA, object objB);
+      public virtual int GetHashCode();
+      public virtual string ToString();
+      protected override void Finalize();
+      protected extern object MemberwiseClone();
+    }
+
+我们将会在第6章描述Equals，ReferenceEquals与GetHashCode方法。
+
+结构
+----
+
+struct类似于class，他们之间的关键区别如下：
+
+-  结构是一个值类型，而类是一个引用类型
+-  结构不支持继承（并不是隐式由object继承，或是更确切的说是，是由System.ValueType继承）
+
+结构可以有类所有的所有成员，除了下列内容：
+
+-  无参数构造器
+-  清理器
+-  虚成员
+
+当需要值类型的语义时，使用结构来代替类。结构的好例子就是数值类型，其中通过拷贝值赋值要比拷贝引用赋值更为自然。因为结构是一个值类型，每一个实例并不需要在堆上对象实例化；当创建许多类型的实例时这将是十分有的资源节省。例如，创建一个值类型的数组只需要一次堆分配。
+
+**结构构造语义**
+
+结构的构造语义如下：
+
+-  我们不能重写的无参数构造器隐式存在。这会执行域的位清零操作。
+-  当我们定义一个结构构造器时，我们必须显式为每一个域赋值。
+-  在结构中我们不能域初始化器。
+
+下面是声明并调用结构构造器的例子：
+
+.. code:: csharp
+
+    public struct Point
+    {
+      int x, y;
+      public Point (int x, int y) { this.x = x; this.y = y; }
+    }
+    ...
+    Point p1 = new Point ();       // p1.x and p1.y will be 0
+    Point p2 = new Point (1, 1);   // p1.x and p1.y will be 1
+
+下面的示例生成三个编译时错误：
+
+.. code:: csharp
+
+    public struct Point
+    {
+      int x = 1;                          // Illegal: cannot initialize field
+      int y;
+      public Point() {}                   // Illegal: cannot have
+                                          // parameterless constructor
+      public Point (int x) {this.x = x;}  // Illegal: must assign field y
+    }
+
+将struct改变class则上面的示例就是合法的了。
+
+访问修饰符
+----------
+
+为了实现封装，类型或是类型成员会通过向声明添加五个访问修饰符中的一个来限制其他类型或是其他程序集的访问：
+
+-  public：完全可访问；对于枚举或是接口的成员隐式完全访问
+-  internal：只对于所包含的程序集或友元程序可访问；对于非嵌入类型的默认访问性
+-  private：只在包含的类型内可见；对于类或是结构成员的默认访问性
+-  protected：只在包含的类型或是子类中可见
+-  protected
+   internal：protected与internal访问性的结合（这比单独的protected或是internal具有更少的限制）
+
+示例
+~~~~
+
+Class2可以在其程序集外部被访问；Class1则不可以：
+
+.. code:: csharp
+
+    class Class1 {}                  // Class1 is internal (default)
+    public class Class2 {}
+
+ClassB向相同程序集中的其他类型公开了域x；ClassA则没有：
+
+ class ClassA { int x; } // x is private (default) class ClassB {
+internal int x; }
+
+.. raw:: html
+
+   </syntaxhighlight>
+
+Subclass中的函数可以访问Bar，但是不能访问Foo：
+
+.. code:: csharp
+
+    class BaseClass
+    {
+      void Foo()           {}        // Foo is private (default)
+      protected void Bar() {}
+    }
+    class Subclass : BaseClass
+    {
+       void Test1() { Foo(); }       // Error - cannot access Foo
+       void Test2() { Bar(); }       // OK
+    }
+
+友元程序集
+~~~~~~~~~~
+
+在高级场景中，我们可以通过添加System.Runtime.CompilerServices.InternalsVisibleTo程序集属性来指定友元程序集的名，从而向其他的友元程序集公开internal成员，如下所示：
+
+[assembly: InternalsVisibleTo ("Friend")]
+
+如果友元有一个强名字，我们必须指定其完全的160字节的公钥：
+
+[assembly: InternalsVisibleTo ("StrongFriend,
+PublicKey=0024f000048c...")]
+
+我们可以使用LINQ查询由一个强命名程序集中解出完全公钥：
+
+.. code:: csharp
+
+    string key = string.Join ("",
+       Assembly.GetExecutingAssembly().GetName().GetPublicKey()
+      .Select (b => b.ToString ("x2"))
+      .ToArray());
+
+访问性隐藏(Accessibility Capping)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+类型可以隐藏其声明成员的访问性。最常见的隐藏的例子就是我们有一个internal类型，而他有public方法。例如：
+
+class C { public void Foo() {} }
+
+C（默认）的internal访问性隐藏了Foo的访问性，从而使得Foo也成为internal。Foo应该标记为public的原因就是稍后C被修改为public之后，更易于重构。
+
+访问修饰符的限制
+~~~~~~~~~~~~~~~~
+
+当重写基类的函数时，访问性必须与重写的函数相同。例如：
+
+.. code:: csharp
+
+    class BaseClass             { protected virtual  void Foo() {} }
+    class Subclass1 : BaseClass { protected override void Foo() {} }  // OK
+    class Subclass2 : BaseClass { public    override void Foo() {} }  // Error
+
+编译器会阻止不一致的访问修饰符的使用。例如，子类本身的访问性可以少于基类，但是不能多：
+
+.. code:: csharp
+
+    internal class A {}
+    public class B : A {}          // Error
+
+接口
+----
+
+接口类似于类，但是他提供了规范而不是成员的实现。接口的特殊性体现在以下几方面：
+
+-  一个类可以实现多个接口。相对应的，一个类只能由一个父类继承。
+-  接口成员全部是隐式抽象的。相对应的，一个类可以提供抽象成员与带有实现的具体成员。
+-  结构可以实现接口。相对应的，结构不能由类继承。
+
+接口的声明类似于类的声明，但是他并没有为其成员提供实现，因为其所有成员都是隐式抽象的。这些成员将会由实现该接口的类或是结构来实现。接口只能包含方法，属性，事件与索引器，也就是可以抽象的类成员。
+
+下面是定义在System.Collections中的IEnumreator接口的定义：
+
+.. code:: csharp
+
+    public interface IEnumerator
+    {
+      bool MoveNext();
+      object Current { get; }
+      void Reset();
+    }
+
+接口的成员总是隐式公开的，并且不能声明访问修饰符。实现接口意味着为其所有成员提供了一个public实现：
+
+.. code:: csharp
+
+    internal class Countdown : IEnumerator
+    {
+      int count = 11;
+      public bool MoveNext () { return count-- > 0 ;               }
+      public object Current   { get { return count; }              }
+      public void Reset()     { throw new NotSupportedException(); }
+    }
+
+我们可以隐式将一个对象转换为他所实现的任意接口。例如：
+
+.. code:: csharp
+
+    IEnumerator e = new Countdown();
+    while (e.MoveNext())
+      Console.Write (e.Current);      // 109876543210
+
+注意，尽管CountDown是一个内部类，实现了IEnumerator的成员可以将CountDown的实例转换为IEnumerator来公开调用。例如，相同程序集中的一个公开类型定义了如下的方法：
+
+.. code:: csharp
+
+    public static class Util
+    {
+      public static object GetCountDown()
+      {
+        return new CountDown();
+      }
+    }
+
+其他程序集中的调用者可以进行如下的调用：
+
+.. code:: csharp
+
+    IEnumerator e = (IEnumerator) Util.GetCountDown();
+    e.MoveNext();
+
+如果IEnumerator本身被定义为internal，则上面的代码是不可行的。
+
+扩展接口
+~~~~~~~~
+
+接口可以由其他的接口继承。例如：
+
+.. code:: csharp
+
+    public interface IUndoable             { void Undo(); }
+    public interface IRedoable : IUndoable { void Redo(); }
+
+IRedoable继承了IUndoable的所有成员。
+
+显式接口实现
+~~~~~~~~~~~~
+
+实现多个接口有时会导致成员签名之间的冲突。我们可以通过显示实现一个接口成员来解决这种冲突。考虑下面的示例：
+
+.. code:: csharp
+
+    interface I1 { void Foo(); }
+    interface I2 { int Foo(); }
+    public class Widget : I1, I2
+    {
+      public void Foo ()
+      {
+        Console.WriteLine ("Widget's implementation of I1.Foo");
+      }
+      int I2.Foo()
+      {
+        Console.WriteLine ("Widget's implementation of I2.Foo");
+        return 42;
+      }
+    }
+
+因为I1与I2具有相冲突的Foo签名，Widget显式实现了I2的Foo方法。这可以使得两个方法在一个类中共存。调用显式实现的成员的唯一方法就是转换为其接口：
+
+.. code:: csharp
+
+    Widget w = new Widget();
+    w.Foo();                      // Widget's implementation of I1.Foo
+    ((I1)w).Foo();                // Widget's implementation of I1.Foo
+    ((I2)w).Foo();                // Widget's implementation of I2.Foo
+
+显式实现接口成员的另一个原因就是隐藏高度特殊化的成员并且转换为类型的通常使用情况。例如，实现了ISerializable的类型通常希望避免展示其ISerializable成员，除非显式转换为接口。
+
+虚实现接口成员
+~~~~~~~~~~~~~~
+
+默认情况下，隐式实现的接口成员是sealed的。为了能够被重写他必须在基类中被标记为virtual或是abstract。例如：
+
+.. code:: csharp
+
+    public interface IUndoable { void Undo(); }
+    public class TextBox : IUndoable
+    {
+      public virtual void Undo()
+      {
+         Console.WriteLine ("TextBox.Undo");
+      }
+    }
+    public class RichTextBox : TextBox
+    {
+      public override void Undo()
+      {
+        Console.WriteLine ("RichTextBox.Undo");
+      }
+    }
+
+通过基类或是通过接口调用接口成员都会调用子类的实现：
+
+.. code:: csharp
+
+    RichTextBox r = new RichTextBox();
+    r.Undo();                          // RichTextBox.Undo
+    ((IUndoable)r).Undo();             // RichTextBox.Undo
+    ((TextBox)r).Undo();               // RichTextBox.Undo
+
+显式实现在的接口成员不能被标记为virtual，也不能以通常的方式重写。然而却可以被重新实现。
+
+在子类中实现接口
+~~~~~~~~~~~~~~~~
+
+子类可以实现父类已经实现在的任意的接口成员。重新实现会劫持成员实现（当通过接口调用时）并且无论基类的成员是否为virtual都能实现。同时无论成员是隐式还是显式实现也同样会工作－尽管正如我们所演示的，他在显式实现中工作得最好。
+
+在下面的示例中，TextBox显式实现了IUndoable.Undo，因而他不能被标记为virtual，为了能够重写，RichTextBox必须重新实现IUndoable的Undo方法：
+
+.. code:: csharp
+
+    public interface IUndoable { void Undo(); }
+    public class TextBox : IUndoable
+    {
+      void IUndoable.Undo() { Console.WriteLine ("TextBox.Undo"); }
+    }
+    public class RichTextBox : TextBox, IUndoable
+    {
+      public new void Undo() { Console.WriteLine ("RichTextBox.Undo"); }
+    }
+
+通过接口调用重新实现的成员会调用子类的实现：
+
+.. code:: csharp
+
+    RichTextBox r = new RichTextBox();
+    r.Undo();                 // RichTextBox.Undo      Case 1
+    ((IUndoable)r).Undo();    // RichTextBox.Undo      Case 2
+
+假定同样的RichTextBox定义，但是TextBox隐式实现Undo接口：
+
+.. code:: csharp
+
+    public class TextBox : IUndoable
+    {
+      public void Undo() { Console.WriteLine ("TextBox.Undo"); }
+    }
+
+这会为我们提供另一种调用Undo的方式，这种方法将会“破坏”系统，如示例3所示：
+
+.. code:: csharp
+
+    RichTextBox r = new RichTextBox();
+    r.Undo();                 // RichTextBox.Undo      Case 1
+    ((IUndoable)r).Undo();    // RichTextBox.Undo      Case 2
+    ((TextBox)r).Undo();      // TextBox.Undo          Case 3
+
+示例显示了重新实现劫持只有在通过接口调用成员时有效，而通过基类调用时无效。这通常并不是我们所希望的，因为这意味着不一致的语义。重新实现是重写显式实现的接口成员的最合适策略。
+
+**接口重新实现的另一种方法**
+
+即使使用显式成员实现，接口重新实现也是有问题的，原因如下：
+
+-  子类没有办法调用父类的方法
+-  基类的作者也许并没有预料到方法会被重新实现并且也并不会允许潜在的结果。
+
+当继承未被预料时，重新实现是最后的手段。然而，一个更好的选择是设计绝不需要重新实现的基类。有两种方法来实现这一点：
+
+-  当隐式实现成员时，如果可能将其标记为virtual
+-  当显式实现成员时，如果我们预料到子类也许需要重写些逻辑则使用下列模式：
+
+.. code:: csharp
+
+    public class TextBox : IUndoable
+    {
+      void IUndoable.Undo()         { Undo(); }   // Calls method below
+      protected virtual void Undo() { Console.WriteLine ("TextBox.Undo"); }
+    }
+    public class RichTextBox : TextBox
+    {
+      protected override void Undo() { Console.WriteLine("RichTextBox.Undo"); }
+    }
+
+如果我们并不希望任何继承，我们可以将类标记为sealed来阻止接口重新实现。
+
+接口与装箱
+~~~~~~~~~~
+
+将一个结构转换为接口会引起装箱。在结构上调用隐式实现的成员并不会引起装箱：
+
+.. code:: csharp
+
+    interface  I { void Foo();          }
+    struct S : I { public void Foo() {} }
+    ...
+    S s = new S();
+    s.Foo();         // No boxing.
+    I i = s;         // Box occurs when casting to interface.
+    i.Foo();
+
+枚举
+----
+
+枚举是一种特殊的值类型，可以使得我们指定一个命名的数值常量组。例如：
+
+.. code:: csharp
+
+    public enum BorderSide { Left, Right, Top, Bottom }
+
+我们可以以下面的方式来使用枚举：
+
+.. code:: csharp
+
+    BorderSide topSide = BorderSide.Top;
+    bool isTop = (topSide == BorderSide.Top);   // true
+
+每一个枚举成员都有一个底层的整数值。默认情况下：
+
+-  底层值是int类型
+-  自动以枚举成员声明的顺序赋值为0，1，2等
+
+我们可以指定另一种整数类型，如下所示：
+
+public enum BorderSide : byte { Left, Right, Top, Bottom }
+
+同时我们也许会希望为每一个枚举成员显式指定一个底层值：
+
+public enum BorderSide : byte { Left=1, Right=2, Top=10, Bottom=11 }
+
+枚举转换
+~~~~~~~~
+
+我们可以使用显式转换将enum实例转换为其底层整数值，或者是相反的转换：
+
+.. code:: csharp
+
+    int i = (int) BorderSide.Left;
+    BorderSide side = (BorderSide) i;
+    bool leftOrRight = (int) side <= 2;
+
+我们也可以显式的将一种枚举类型转换另一种枚举类型。假定HorizontalAlignment定义如下：
+
+.. code:: csharp
+
+    public enum HorizontalAlignment
+    {
+      Left = BorderSide.Left,
+      Right = BorderSide.Right,
+      Center
+    }
+
+枚举类型之间的转换使用底层整数值：
+
+.. code:: csharp
+
+    HorizontalAlignment h = (HorizontalAlignment) BorderSide.Right;
+    // same as:
+    HorizontalAlignment h = (HorizontalAlignment) (int) BorderSide.Right;
+
+enum表达式中的数值字面量0会被编译器特殊对待并且不需要显式的转换：
+
+.. code:: csharp
+
+    BorderSide b = 0;    // No cast required
+    if (b == 0) ...
+
+0的特殊处理有两个原因：
+
+-  枚举的每一个成员通常用作默认值
+-  对于组合的枚举类型，0意味着“没有标记”
+
+Flags枚举
+~~~~~~~~~
+
+我们可以组合枚举成员。为了避免不确定性，可组合的枚举的成员需要显式赋值，通常是2的幂次。例如：
+
+.. code:: csharp
+
+    [Flags]
+    public enum BorderSides { Left=1, Right=2, Top=4, Bottom=8 }
+
+为了使用组合的枚举值，我们使用位操作符，例如\|与&。这会在底层的整数值上进行操作：
+
+.. code:: csharp
+
+    BorderSides leftRight = BorderSides.Left | BorderSides.Right;
+    if ((leftRight & BorderSides.Left) != 0)
+      Console.WriteLine ("Includes Left");     // Includes Left
+    string formatted = leftRight.ToString();   // "Left, Right"
+    BorderSides s = BorderSides.Left;
+    s |= BorderSides.Right;
+    Console.WriteLine (s == leftRight);   // True
+    s ^= BorderSides.Right;               // Toggles BorderSides.Right
+    Console.WriteLine (s);                // Left
+
+通过约定，Flags属性应总是可以应用在其成员可以组合的枚举类型上。如果我们没有使用Flags属性声明这样的enum，我们也可以组合成员，但是在enum实例上调用ToString方法会输出一个数字而不是一系列名字。
+
+通过约定，可组合的枚举类型被指定为一个复数名字而不是一个单数名字。
+
+为了方便，我们可以在枚举声明自身中包含组合成员：
+
+.. code:: csharp
+
+    [Flags]
+    public enum BorderSides
+    {
+      Left=1, Right=2, Top=4, Bottom=8,
+      LeftRight = Left | Right,
+      TopBottom = Top  | Bottom,
+      All       = LeftRight | TopBottom
+    }
+
+枚举操作符
+~~~~~~~~~~
+
+可以在枚举上使用的操作符如下：
+
+.. code:: csharp
+
+    =   ==   !=   <   >   <=   >=   +   -   ^  &  |   ?
+    +=   -=   ++  -   sizeof
+
+位操作符，算术操作符以及比较操作符返回底层整数值的处理结果。加操作符应用在枚举与整数类型之间，而不是两个枚举之间。
+
+类型安全问题
+~~~~~~~~~~~~
+
+考虑下面的枚举：
+
+.. code:: csharp
+
+    public enum BorderSide { Left, Right, Top, Bottom }
+
+因为枚举类型可以与底层的整数类型之间进行转换，实际的值也许会落在合法的枚举成员的边界之外。例如：
+
+.. code:: csharp
+
+    BorderSide b = (BorderSide) 12345;
+    Console.WriteLine (b);                // 12345
+
+位操作符与算术操作也会产生类似的不正确的值：
+
+.. code:: csharp
+
+    BorderSide b = BorderSide.Bottom;
+    b++;                                  // No errors
+
+不正确的BorderSide会破坏下面的代码：
+
+.. code:: csharp
+
+    void Draw (BorderSide side)
+    {
+      if      (side == BorderSide.Left)  {...}
+      else if (side == BorderSide.Right) {...}
+      else if (side == BorderSide.Top)   {...}
+      else                               {...} // Assume BorderSide.Bottom
+    }
+
+一个解决方法就是添加另一个else子句：
+
+.. code:: csharp
+
+      ...
+      else if (side == BorderSide.Bottom) ...
+      else throw new ArgumentException ("Invalid BorderSide: " + side, "side");
+
+另一种方法就是显式检测枚举值的正确的性。静态的Enum.IsDefined方法可以完成这一工作：
+
+.. code:: csharp
+
+    BorderSide side = (BorderSide) 12345;
+    Console.WriteLine (Enum.IsDefined (typeof (BorderSide), side));   // False
+
+不幸的是，Enum.IsDefined并不能用于标记的枚举。然而，下面的助手方法会在指定的标记枚举正确时返回true：
+
+.. code:: csharp
+
+    static bool IsFlagDefined (Enum e)
+    {
+      decimal d;
+      return !decimal.TryParse(e.ToString(), out d);
+    }
+    [Flags]
+    public enum BorderSides { Left=1, Right=2, Top=4, Bottom=8 }
+    static void Main()
+    {
+      for (int i = 0; i <= 16; i++)
+      {
+        BorderSides side = (BorderSides)i;
+        Console.WriteLine (IsFlagDefined (side) + " " + side);
+      }
+    }
+
+嵌套类型
+--------
+
+嵌套类型是在一个类型的作用域之外声明的类型。例如：
+
+.. code:: csharp
+
+    public class TopLevel
+    {
+      public class Nested { }               // Nested class
+      public enum Color { Red, Blue, Tan }  // Nested enum
+    }
+
+嵌套类型具有下列特性：
+
+-  他可以访问封装类型的私有方法以及封装类型可以访问的所用内容
+-  他可以使用所有的访问修饰符声明，而不仅仅是public与internal
+-  嵌套类型的可见性默认为private而不是internal
+-  在封装类型的外面访问嵌套类型需要使用封装类型的名字作修饰
+
+例如，为了在我们的TopLevel类之外访问Color.Red，我们必须使用下面的方式：
+
+.. code:: csharp
+
+    TopLevel.Color color = TopLevel.Color.Red;
+    </syntaxhighligt>
+
+    所有的类型都可以被嵌套；然而，只有类与结构可以嵌套。
+
+    下面是由一个嵌套类型访问类型的私有成员的示例：
+
+    <syntaxhighlight lang="csharp">
+    public class TopLevel
+    {
+      static int x;
+      class Nested
+      {
+        static void Foo() { Console.WriteLine (TopLevel.x); }
+      }
+    }
+
+下面是在一个嵌套类型上应用protected访问修饰符的示例：
+
+.. code:: csharp
+
+    public class TopLevel
+    {
+      protected class Nested { }
+    }
+    public class SubTopLevel : TopLevel
+    {
+      static void Foo() { new TopLevel.Nested(); }
+    }
+
+下面是由封装类型的外面引用嵌套类型的示例：
+
+.. code:: csharp
+
+    public class TopLevel
+    {
+      public class Nested { }
+    }
+    class Test
+    {
+      TopLevel.Nested n;
+    }
+
+当编译器生成捕获构造器状态，例如迭代器与匿名方法，的私有类时，会大量使用嵌套类。
+
+泛型
+----
+
+C#用两种单独的机制用于编写在不同的类型之间重用的代码：继承与泛型。其中继承使用基类类型表示重用性，泛型使用包含“占位”类型的“模板”表示重用性。与继承相比，泛型可以增加类型安全性并且减少转换与装箱。
+
+泛型类型
+~~~~~~~~
+
+泛型类型声明类型参数－由泛型类型消费者来填充的占位符类型，泛型类型消费者提供了类型参数。下面是一个泛型类型Stack，被设计为类型T的栈实例。Stack声明了单一的类型参数T：
+
+.. code:: csharp
+
+    public class Stack<T>
+    {
+      int position;
+      T[] data = new T[100];
+      public void Push (T obj)   { data[position++] = obj;  }
+      public T Pop()             { return data[--position]; }
+    }
+
+我们可以以如下的方式使用Stack：
+
+.. code:: csharp
+
+    Stack<int> stack = new Stack<int>();
+    stack.Push(5);
+    stack.Push(10);
+    int x = stack.Pop();        // x is 10
+    int y = stack.Pop();        // y is 5
+
+Stack使用类型参数int填充类型参数T，在需要时隐式创建类型。Stack实际具有下列定义：
+
+.. code:: csharp
+
+    public class ###
+    {
+      int position;
+      int[] data;
+      public void Push (int obj)   { data[position++] = obj;  }
+      public int Pop()             { return data[--position]; }
+    }
+
+由技术上来说，我们称Stack是一个开放类型，而Stack是一个封装类型。在运行时，所有的泛型实例都是封闭的－填充了占位符类型。这就意味着下面的语句是非法的：
+
+var stack = new Stack(); // Illegal: What is T?
+
+除非是在本身将T定义为类型参数的类或是方法中：
+
+.. code:: csharp
+
+    public class Stack<T>
+    {
+      ...
+      public Stack<T> Clone()
+      {
+        Stack<T> clone = new Stack<T>();   // Legal
+        ...
+      }
+    }
+
+为什么存在泛型
+~~~~~~~~~~~~~~
+
+泛型用来编写在不同的类型之间可重用的代码。假定我们需要一个整数的栈，但是我们没有泛型类型。一个解决方法就是为所需要的每一个元素类型硬编码一个类的单独版本（例如IntStack，StringStack）。很明显，这会引起代码重复。另一种解决方法是使用object作为元素类型来编写一个泛型化的栈：
+
+.. code:: csharp
+
+    public class ObjectStack
+    {
+      int position;
+      object[] data = new object[10];
+      public void Push (object obj) { data[position++] = obj;  }
+      public object Pop()           { return data[--position]; }
+    }
+
+然而，ObjectStack并不会硬编码的IntStack那样工作。特别是，ObjectStatck需要在编译时不能检测的装箱与向下转换操作：
+
+.. code:: csharp
+
+    // Suppose we just want to store integers here:
+    ObjectStack stack = new ObjectStack();
+    stack.Push ("s");          // Wrong type, but no error!
+    int i = (int)stack.Pop();  // Downcast - runtime error
+
+我们所需要的是能够用于所用元素类型的栈的泛型实现，以及一种主法使得我们可以很容易将栈特例为特定元素类型以增加类型安全并减少转换与装箱操作。泛型通过使得我们参数化元素类型来为我们提供我们所需要的。Stack同时具有ObjctStack与IntStack的优点。类似于ObjectStack，Stack被编写一次来处理所有的类型。类似于IntStack，Stack是特定于特定类型的－美妙之处就在于这个类型是T，我们可以在需要时替换。
+
+泛型方法
+~~~~~~~~
+
+泛型方法在方法的签名内声明类型参数。
+
+通过泛型方法，许多基础的算法就可以以一种通用的目的实现。下面是交换任意两个类型值的泛型方法：
+
+.. code:: csharp
+
+    static void Swap<T> (ref T a, ref T b)
+    {
+      T temp = a;
+      a = b;
+      b = temp;
+    }
+
+Swap可以以下面的方式使用：
+
+.. code:: csharp
+
+    int x = 5;
+    int y = 10;
+    Swap (ref x, ref y);
+
+通常并没有必要向泛型方法提供类型参数，因为编译器可以隐式的推测类型。如果存在不确定性，泛型方法可以使用类型参数进行调用，如下所示：
+
+Swap (ref x, ref y);
+
+在泛型类型中，方法并不是泛型一类，除非他引入了类型参数。在我们泛型栈中的Pop方法并没有使用类型的类型参数，T，因而并不是一个泛型方法。
+
+方法与类型是唯一可以引入类型参数的组成部分。属性，索引，事件，域，构造器，操作符等并不能声明类型参数，尽管他们可以共享由他们的封装类型所声明的类型参数。例如，在我们泛型栈的示例中，我们可以编写一个返回泛型项的索引器：
+
+public T this [int index] { get { return data [index]; } }
+
+类似的，构造器可以分享已存在的类型参数，但是不能引入类型参数：
+
+public Stack() { } // Illegal
+
+类型参数
+~~~~~~~~
+
+类型参数可以在类，结构，接口，委托以及方法的声明中引入。其他的组成部分，例如属性，不能引入类型参数，但是可以使用类型参数。例如，属性Value使用T：
+
+.. code:: csharp
+
+    public struct Nullable<T>
+    {
+      public T Value { get; set; }
+    }
+
+一个泛型类型或是泛型方法可以有多个参数。例如：
+
+class Dictionary {...}
+
+实例化方法如下：
+
+Dictionary myDic = new Dictionary();
+
+或者：
+
+var myDic = new Dictionary();
+
+泛型类型名字与泛型方法名字可以被重载，只要类型参数不同即可。例如，下面的两个类型名字并不冲突：
+
+.. code:: csharp
+
+    class A<T> {}
+    class A<T1,T2> {}
+
+typeof与非绑定的泛型类型
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+开放泛型类型在运行时并不存在：开放泛型类型被封闭作为编译的一部分。然而，未绑定的泛型类型在运行时是可能存在的－作为Type对象。在C#中指定未绑定泛型类型的唯一方法是使用typeof操作符：
+
+.. code:: csharp
+
+    class A<T> {}
+    class A<T1,T2> {}
+    ...
+    Type a1 = typeof (A<>);   // Unbound type (notice no type arguments).
+    Type a2 = typeof (A<,>);  // Use commas to indicate multiple type args.
+
+我们也可以使用typeof操作来指定一个封闭类型：
+
+Type a3 = typeof (A);
+
+或是一个开放类型：
+
+class B { void X() { Type t = typeof (T); } }
+
+默认泛型值
+~~~~~~~~~~
+
+default关键字可以用来获取指定给泛型类型参数的默认值。引用类型的默认值为null，值类型的默认值为类型的域位清零的结果：
+
+.. code:: csharp
+
+    static void Zap<T> (T[] array)
+    {
+      for (int i = 0; i < array.Length; i++)
+        array[i] = default(T);
+    }
+
+泛型约束
+~~~~~~~~
+
+默认情况下，类型参数可以使用任意类型进行替换。可以在类型参数上应用约束来要求更为特定的类型参数。可能的约束如下：
+
+.. code:: csharp
+
+    where T : base-class   // Base class constraint
+    where T : interface    // Interface constraint
+    where T : class        // Reference-type constraint
+    where T : struct       // Value-type constraint (excludes Nullable types)
+    where T : new()        // Parameterless constructor constraint
+    where U : T            // Naked type constraint
+
+在下面的示例中，GenericClass要T由SomeClass派生并且实现Interface1，要求U提供无参数的构造器：
+
+.. code:: csharp
+
+    class     SomeClass {}
+    interface Interface1 {}
+    class GenericClass<T> where T : SomeClass, Interface1
+                          where U : new()
+    {...}
+
+约束可以应用在定义类型参数的任意位置，方法或是类型定义中。
+
+基类约束或是接口约束指定类型参数必须继承或是实现某个类或接口。这个可以使得该类型的实例隐式转换为该类或是接口。例如，假定我们要编写一个通用的Max方法，他会返回两个值中的大值。我们可以利用定义在框架中名为IComparable的泛型接口：
+
+.. code:: csharp
+
+    public interface IComparable<T>   // Simplified version of interface
+    {
+      int CompareTo (T other);
+    }
+
+如果other大于this则CompareTo会返回正数。使用这个接口作为约束，我们可以编写如下的Max方法：
+
+.. code:: csharp
+
+    static T Max <T> (T a, T b) where T : IComparable<T>
+    {
+      return a.CompareTo (b) > 0 ? a : b;
+    }
+
+Max方法可以接受实现了IComparable接口的任意类型：
+
+.. code:: csharp
+
+    int z = Max (5, 10);               // 10
+    string last = Max ("ant", "zoo");  // zoo
+
+类约束与结构结构约束指定了T必须是引用类型或是（非空的）值类型。结构约束的最好例子就是System.Nullable结构：
+
+struct Nullable where T : struct {...}
+
+无参数构造器约束要求T有一个公开的无参数构造器。如果定义了这个约束，我们可以在T上调用new()：
+
+.. code:: csharp
+
+    static void Initialize<T> (T[] array) where T : new()
+    {
+      for (int i = 0; i < array.Length; i++)
+        array[i] = new T();
+    }
+
+无修饰类型约束要求类型参数派生于其他的类型参数。在这个示例中，方法FilteredStack返回另一个Stack，包含元素子集：
+
+.. code:: csharp
+
+    class Stack<T>
+    {
+      Stack<U> FilteredStack<U>() where U : T {...}
+    }
+
+继承泛型类型
+~~~~~~~~~~~~
+
+泛型类可以像非泛型类一样继承。子类可以使得父类的类型参数开放，如下面的示例所示：
+
+.. code:: csharp
+
+    class Stack<T>                   {...}
+    class SpecialStack<T> : Stack<T> {...}
+
+或者子类使用确定类型关闭泛型类型参数：
+
+class IntStack : Stack {...}
+
+子类型也可以引入新的类型参数：
+
+.. code:: csharp
+
+    class List<T>                     {...}
+    class KeyedList<T,TKey> : List<T> {...}
+
+自引用泛型声明
+~~~~~~~~~~~~~~
+
+当关闭类型参数时，类型可以将其自身命名为确定类型：
+
+.. code:: csharp
+
+    public interface IEquatable<T> { bool Equals (T obj); }
+    public class Balloon : IEquatable<Balloon>
+    {
+      public string Color { get; set; }
+      public int CC { get; set; }
+      public bool Equals (Balloon b)
+      {
+        if (b == null) return false;
+        return b.Color == Color && b.CC == CC;
+      }
+    }
+
+下面的代码也是合法的：
+
+.. code:: csharp
+
+    class Foo<T> where T : IComparable<T> { ... }
+    class Bar<T> where T : Bar<T> { ... }
+
+静态数据
+~~~~~~~~
+
+对于每一个关闭类型，静态数据是唯一的：
+
+.. code:: csharp
+
+    class Bob<T> { public static int Count; }
+    class Test
+    {
+      static void Main()
+      {
+        Console.WriteLine (++Bob<int>.Count);     // 1
+        Console.WriteLine (++Bob<int>.Count);     // 2
+        Console.WriteLine (++Bob<string>.Count);  // 1
+        Console.WriteLine (++Bob<object>.Count);  // 1
+      }
+    }
+
+类型参数与转换
+~~~~~~~~~~~~~~
+
+C#的转换操作符可以执行多种转换类型，包括：
+
+-  数值转换
+-  引用转换
+-  装箱/拆箱转换
+-  自定义转换
+
+发生哪种类型的转换的决定是编译时基于操作的已知类型确定的。对于泛型类型参数则有一些有趣的场景，因为精确的操作数类型在编译时是未知的。如果这导致不确定性，编译器会生成错误。
+
+最常见的场景是当我们希望执行引用转换时：
+
+.. code:: csharp
+
+    StringBuilder Foo<T> (T arg)
+    {
+      if (arg is StringBuilder)
+        return (StringBuilder) arg;   // Will not compile
+      ...
+    }
+
+不知道T的实际类型，编译器会认为我们希望其为自定义转换。最简单的解决方法是使用as操作符，这是确定的，因为他不能执行自定义转换：
+
+.. code:: csharp
+
+    StringBuilder Foo<T> (T arg)
+    {
+      StringBuilder sb = arg as StringBuilder;
+      if (sb != null) return sb;
+      ...
+    }
+
+更通常的解决方示是将其转换为object。这种方法之所以起作用是因为与object之间的转换并不是自定义转换，而是引用或装箱/拆箱转换。在这种情况下，StringBuilder是一个引用类型，所以他是引用转换：
+
+``?return?(StringBuilder)?(object)?arg;``
+
+拆箱转换也会引入不确定性。下面的操作可能是拆箱，数值转换或是自定义转换：
+
+int Foo (T x) { return (int) x; } // Compile-time error
+
+解决方法就是首先转换为object，然后转换为int：
+
+int Foo (T x) { return (int) (object) x; }
+
+Covariance
+~~~~~~~~~~
+
+假定S继承B，如果X<S>允许引用转换到X<B>，则类型X就是covariant。
+
+换句话说，如果下列语句合法，则IFoo是covariant：
+
+.. code:: csharp
+
+    IFoo<string> b = ...;
+    IFoo<object> s = b;
+
+在C#
+4.0中，泛型接口允许covariant（泛型委托也是如此），但是泛型类并不支持。数组也支持covariance（如果S继承B，则S[]可以转换为B[]），在这里我们会进行讨论比较。
+
+**类**
+
+泛型类不是协变的（covariant），从而保证静态类型安全。考虑下面的代码：
+
+.. code:: csharp
+
+    class Animal {}
+    class Bear : Animal {}
+    class Camel : Animal {}
+    public class Stack<T>   // A simple Stack implementation
+    {
+      int position;
+      T[] data = new T[100];
+      public void Push (T obj)   { data[position++] = obj;  }
+      public T Pop()             { return data[--position]; }
+    }
+
+下面的代码会编译失败：
+
+.. code:: csharp
+
+    Stack<Bear> bears = new Stack<Bear>();
+    Stack<Animal> animals = bears;            // Compile-time error
+
+限制可以使用下面的代码防止运行时失败的可能：
+
+animals.Push (new Camel()); // Trying to add Camel to bears
+
+然而，缺少协变会阻碍可重用性。例如，假定我们希望编写一个Wash
+Animal栈的方法：
+
+.. code:: csharp
+
+    public class ZooCleaner
+    {
+      public static void Wash (Stack<Animal> animals) {...}
+    }
+
+在Bear栈上调用Wash会产生编译时错误。一个解决方法就是使用约束重新定义Wash方法：
+
+.. code:: csharp
+
+    class ZooCleaner
+    {
+      public static void Wash<T> (Stack<T> animals) where T : Animal { ... }
+    }
+
+我们可以像下面这样调用Wash：
+
+.. code:: csharp
+
+    Stack<Bear> bears = new Stack<Bear>();
+    ZooCleaner.Wash (bears);
+
+另一个解决方法是使得Stack实现一个协变的泛型接口，我们稍后将会看到。
+
+**数组**
+
+由于历史原因，数组类型是协变的。如果B继承于A，则B[]可以被转换为A[]（两个都是引用类型）。例如：
+
+.. code:: csharp
+
+    Bear[] bears = new Bear[3];
+    Animal[] animals = bears;     // OK
+
+这种重用性的缺点就是运行时的元素赋值会失败：
+
+animals[0] = new Camel(); // Runtime error
+
+**接口**
+
+作为C#
+4.0，泛型接口支持通过out修饰符标记的类型参数的协变。与数组不同，修饰符保证接口的协变是完全类型安全的。为了进行演示，假定我们的Stack类实现了下面的接口：
+
+public interface IPoppable { T Pop(); }
+
+T上的out修饰符是C#
+4.0新引入的，表明T只用于输出位置（例如方法的返回类型）。out修饰符将接口标记为协变的，并且允许我们编写下面的代码：
+
+.. code:: csharp
+
+    var bears = new Stack<Bear>();
+    bears.Push (new Bear());
+    // Bears implements IPoppable<Bear>. We can convert to IPoppable<Animal>:
+    IPoppable<Animal> animals = bears;   // Legal
+    Animal a = animals.Pop();
+
+由bears到animals的转换是为编译器所允许的－因为接口是协变的。这是类型安全的，因为编译器尝试避免的情况－将Camel压入栈－并不会发生，因为并没有办法向接口提供Camel，其中T只能在输出位置出现。
+
+我们可以保留转换协变性来解决重用问题的能力，如前所述：
+
+.. code:: csharp
+
+    public class ZooCleaner
+    {
+      public static void Wash (IPoppable<Animal> animals) { ... }
+    }
+
+如果我们在输入位置使用一个协变的类型参数，则编译器会生成错误。
+
+Contravariance
+--------------
+
+我们在前面了解到，如果X<S>允许引用转换为X<B>，则类型X是协变的，其中S继承自B。当我们可以执行相同的转换时，则类型是逆变的－由X<B>到X<S>。这是由C#
+4.0中的接口所支持的－当泛型类型参数只出现在输入位置时，由in修饰符进行修饰。扩展我们前面的例子，如果Stack类实现了下面的接口：
+
+public interface IPushable { void Push (T obj); }
+
+则我们可以合法的执行下面的操作：
+
+.. code:: csharp
+
+    IPushable<Animal> animals = new Stack<Animal>();
+    IPushable<Bear> bears = animals;    // Legal
+    bears.Push (new Bear());
+
+在IPushable中并没有成员输出T，所以我们不会遇到将animals转换为bears的麻烦（例如，没有办法通过接口Pop）。
+
+为了提供另一个例子，考虑下面的接口，定义为.NET框架的一部分：
+
+.. code:: csharp
+
+    public interface IComparer<in T>
+    {
+      // Returns a value indicating the relative ordering of a and b
+      int Compare (T a, T b);
+    }
+
+因为这个接口是逆变的，我们可以使用IComparer来比较两个字符串：
+
+.. code:: csharp
+
+    var objectComparer = Comparer<object>.Default;
+    // objectComparer implements IComparer<object>
+    IComparer<string> stringComparer = objectComparer;
+    int result = stringComparer.Compare ("Brett", "Jemaine");
+
+与协变相对应的，如果我们尝试在输出位置使用逆变参数，则编译器会报告错误（例如，作为返回值，或是可读属性）。
+
+C#泛型与C++模板
+---------------
+
+程序中C#泛型类似于C++模板，但是他们的作用完全不同。在两种情况下，必须出现生产者与消费者之间的合成，其中生产者的占位符类型是由消费者填充的。然而，对于C#泛型，生产者类型（例如，如List的开放类型）可以编译到库中（例如mscorlib.dll）。这之所以起作用是因为生产者与产生关闭类型的消费者之间的合成只有在运行时才会实际发生。对于C++模板，这种合成是在编译时执行的。这就意味着在C++中我们不会将模板库部署为dll－他们只作为源码存在。同时这也使得动态检测，单独创建，按需参数化类型变得很困难。
+
+要深入了解为什么会出现这种情况，考虑C#中的Max方法：
+
+.. code:: csharp
+
+    static T Max <T> (T a, T b) where T : IComparable<T>
+    {
+      return a.CompareTo (b) > 0 ? a : b;
+    }
+
+为什么我们不能像下面这样实现呢？
+
+.. code:: csharp
+
+    static T Max <T> (T a, T b)
+    {
+      return a > b ? a : b;             // Compile error
+    }
+
+原因在于Max方法只被编译一次，并且适用于T的所有可能值。后一种方法不能成功，是因为并不是T的所有值都能理解>的含义－事实上，并不是所有的T都会有一个>操作符。相对应的，下面的代码显示了使用C++模板编写的Max方法。这段代码会对于每一个T值进行单独编译，依据对于一个特定的T是否理解>的语义，如果T不支持>操作符则会编译失败：
+
+.. code:: cpp
+
+    template <class T> T Max (T a, T b)
+    {
+      return a > b ? a : b;
+    }
+

@@ -1,0 +1,2487 @@
+Chapter 2. C# Language Basics
+=============================
+
+在本章中，我们介绍C#语言的基础。
+
+第一个C#程序
+------------
+
+下面的程序将12与30相乘并且将结果360输出到屏幕。双斜线表示本行的其余部分是注释：
+
+.. code:: csharp
+
+    using System;                     // Importing namespace
+    class Test                        // Class declaration
+    {
+      static void Main()              //   Method declaration
+      {
+        int x = 12 * 30;              //     Statement 1
+        Console.WriteLine (x);        //     Statement 2
+      }                               //   End of method
+    }                                 // End of class
+
+这个程序的核心是两条语句。C#中的语句顺序执行。每一条语句以分号结束：
+
+.. code:: csharp
+
+      int x = 12 * 30;
+      Console.WriteLine (x);
+
+每一条语句计算表达式12\*30并将结果存储在一个名为x的局部变量中，他是一个整数类型。第二条语句调用Console类的WriteLine方法将变量x输出到屏幕上的一个文本窗口中。
+
+方法以一系列的语句执行一个动作，称之为语句块－包含0或是多条语句的一对花括号。我们只定义了一个名为Main的方法：
+
+.. code:: csharp
+
+      static void Main()
+      {
+        ...
+      }
+
+编写调用低层函数的高层函数可以简化程序。我们可以使用乘以整数12的可重用方法来重构我们的程序：
+
+.. code:: csharp
+
+    using System;
+    class Test
+    {
+      static void Main()
+      {
+        Console.WriteLine (FeetToInches (30));      // 360
+        Console.WriteLine (FeetToInches (100));     // 1200
+      }
+      static int FeetToInches (int feet)
+      {
+        int inches = feet * 12;
+        return inches;
+      }
+    }
+
+方法可以通过指定参数由调用者接收输入数据，并通过指定返回类型将输出数据返回给调用者。我们定义了一个名为FeetToInches的方法，这个方法有一个用于输入的参数，以及一个用于输出的返回类型：
+
+.. code:: csharp
+
+    static int FeetToInches (int feet) {...}
+
+字面量30与100是传递给FeetToInches方法的参数。我们例子中的Main方法具有空括号，因为他没有参数，并且是void的，因为他并没有向调用者返回任何值：
+
+.. code:: csharp
+
+    static void Main()
+
+C#将名为Main的方法看作唯一的默认执行入口点。为了向执行环境返回一个值，Main方法可以返回一个整数（而不是void）。Main方法也可以选择接收一个字符串数组作为参数。例如：
+
+.. code:: csharp
+
+    static int Main (string[] args) {...}
+
+方法是C#中多种函数类型中的一种。我们所用的另一种函数类型就是\*操作符，来执行相乘运算。同时还有构造函数，属性，事件，indexer与finalizer。
+
+在我们的例子中，两个方法被组合在一个类中。类组合函数成员与数据成员来形成面向对象的构建块。Console类组合处理命令行输入/输出功能的成员，例如WriteLine。我们的Test类组合了两个方法－Main方法以及FeetToInches方法。类是一个类型（type）种类，我们将会在“类型基础”中探讨。
+
+在程序的最外层，类型被组织为名字空间。using指令用来使得System名字对于我们的程序可用，从而使用Console类。我们可以在TestPrograms名字空间中定义我们所有的类，如下所示：
+
+.. code:: csharp
+
+    using System;
+    namespace TestPrograms
+    {
+      class Test  {...}
+      class Test2 {...}
+    }
+
+.NET框架被组织为嵌套的名字空间。例如，下面是包含用于处理文本类型的名字空间：
+
+using System.Text;
+
+这里的using指令是为了方便；我们也可以通过命名来引用类型，这就是以名字空间作为前缀的类型名，例如System.Text.StringBuilder。
+
+编译
+~~~~
+
+C#编译器将所指定的.cs扩展名的文件集合的源码编译为一个集合。集合是打包与部署在.NET中的单位。集合可以是一个程序或是一个库。一个通常的控制器或是Windows程序具有一个Main方法，并且是一个.exe文件。库是一个.dll并且与没有入口点的.exe相等同。其目的就是为其他的程序或是其他库所调用。.NET框架是一个库的集合。
+
+C#编译器的名字是csc.exe。我们可以使用IDE，例如Visual
+Studio，来编译，或是由命令行手动调用csc。要手动编译，首先要将程序保存为一个文件，例如MyFirstProgram.cs，然后进入命令行并且执行csc命令：
+
+csc MyFirstProgram.cs
+
+这会生成一个名为MyFirstPrograme.exe的程序。
+
+要生成一个库，执行下面的代码：
+
+csc /target:library MyFirstProgram.cs
+
+语法
+----
+
+C#语法基于C与C++语法。这本节中，我们将会使用下面的程序来描述C#的语法元素：
+
+.. code:: csharp
+
+    using System;
+    class Test
+    {
+      static void Main()
+      {
+        int x = 12 * 30;
+        Console.WriteLine (x);
+      }
+    }
+
+标识符与关键字
+~~~~~~~~~~~~~~
+
+标识符是程序为他们的类，方法，变量等所选择的名字。下面是我们示例程序中的标识符，以出现顺序排列：
+
+System Test Main x Console WriteLine
+
+标记符必须是一个完整的单词，特别是以字母或是下划线开头的Unicode字符组成。C#标识符是大小写敏感的。一般的约定情况下，参数，局部变量，以及私有域应以驼峰方式书写（例如，myVariable），而所有其他的标识符应以Pascal方式书写（例如，MyMethod）。
+
+关键字是编译器保留而我们不能用作标记符的名字。在我们这个示例程序中所使用的关键字如下：
+
+.. code:: csharp
+
+    using   class   static   void   int
+
+下面是完整的C#关键字列表：
+
+.. code:: csharp
+
+    abstract    as       base        bool      break
+    byte        case     catch       char      checked
+    class       const    continue    decimal   default
+    delegate    do       double      else      enum
+    event       explicit extern      false     finally
+    fixed       float    for         foreach   goto
+    if          implicit in          int       interface
+    internal    is       lock        long      namespace
+    new         null     object      operator  out
+    override    params   private     protected public
+    readonly    ref      return      sbyte     sealed
+    short       sizeof   stackalloc  static    string
+    struct      switch   this        throw     true
+    try         typeof   uint        ulong     unchecked
+    unsafe      ushort   using       virtual   volatile
+    void        while
+
+**避免冲突**
+
+如果我们确实希望使用与关键字相冲突的标记符，我们可以通过使用@前缀作为修改来实现。例如：
+
+.. code:: csharp
+
+    class class  {...}      // Illegal
+    class @class {...}      // Legal
+
+@符号并不是标签本身的一部分。所以@myVariable与myVariable相同。
+
+**上下文相关关键字**
+
+一些关键字是上下文相关的，这就意味着在不使用@符号的情况下，他们也可以用作标识符。他们是：
+
+.. code:: csharp
+
+    add    ascending   by       descending   dynamice   quals
+    from   get         global   group        in         into
+    join   let         on       orderby      partial    remove
+    select set         value    var          where      yield
+
+使用上下文关键字，在他们所用的环境中不能出现歧义。
+
+字面量，标点与操作符
+~~~~~~~~~~~~~~~~~~~~
+
+字面量是静态嵌入到程序中的基本数据块。在我们的示例中所用的字面最是12与30。
+
+标点用来帮助划分程序的结构。下面是在我们的示例程序中所用的标点符号：
+
+； { }
+
+分号用来结束一条语句。这就意味着语句可以跨越多行：
+
+.. code:: csharp
+
+    Console.WriteLine
+      (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10);
+
+花括号用来将多条语句组织为一个语句块。
+
+操作符转换并组合表达式。C#中的大多数运算符都是以符号来表示的，例如乘法操作符\*。我们将会在本章稍后的部分详细讨论运算符。下面是在我们的示例程序中所用的运算符：
+
+. () \* =
+
+句点表示某物的成员（或是数字字面量的小数点）。括号会在声明或是调用方法时使用；当方法不接受参数时则使用空括号。等号用于赋值（双等号==用于相等比较）。
+
+注释
+~~~~
+
+C#提供了两种不同的源码文档风格：单行注释与多行注释。单行注释以双斜线开头并且直到本行的结束。例如：
+
+.. code:: csharp
+
+    int x = 3;   // Comment about assigning 3 to x
+
+多行注释以/\*开头，以\*/结束。例如：
+
+.. code:: csharp
+
+    int x = 3;   /* This is a comment that
+                    spans two lines */
+
+注释中也许会嵌入XML文档标记。
+
+类型基础
+--------
+
+类型（type）定义了一个值的蓝图。值（value）是通过变量或是常量所表示的存储位置。变量表示一个可以修改的值，而常量表示不可以修改的值。在我们的第一个程序中，我们创建一个名为x的局部变量：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      int x = 12 * 30;
+      Console.WriteLine (x);
+    }
+
+C#中的所有值都是一个特定类型的实例。值的含义以及变量可以具有的可能值的集合是由其类型来定义的。x的类型为int。
+
+预定义的类型示例
+~~~~~~~~~~~~~~~~
+
+预定义的类型是由编译器所支持的类型。int类型是一个预定义类型，表示适合于32位内存的整数集合，由-2^31到2^31-1。我们可以使用int类型的实例来执行函数运算，例如算术运算：
+
+.. code:: csharp
+
+    int x = 12 * 30;
+
+另一个预定义的C#类型是string。string类型表示一个字符序列，例如".NET"或是"\ `http://oreilly.com"。我们可以通过在字符串上调用函数来使用字符串，例如： <http://oreilly.com"。我们可以通过在字符串上调用函数来使用字符串，例如：>`__
+
+.. code:: csharp
+
+    string message = "Hello world";
+    string upperMessage = message.ToUpper();
+    Console.WriteLine (upperMessage);               // HELLO WORLD
+    int x = 2010;
+    message = message + x.ToString();
+    Console.WriteLine (message);                    // Hello world2010
+
+预定义的布尔类型只有两个值：true与false。bool类型通常用于基于if语句的条件分支执行。例如：
+
+.. code:: csharp
+
+    bool simpleVar = false;
+    if (simpleVar)
+      Console.WriteLine ("This will not print");
+    int x = 5000;
+    bool lessThanAMile = x < 5280;
+    if (lessThanAMile)
+      Console.WriteLine ("This will print");
+
+自定义类型示例
+~~~~~~~~~~~~~~
+
+就如同我们可以由简单的函数构建复杂的函数，我们可以由基本类型构建复杂类型。在这个示例中，我们将会定义一个名为UnitConverter的自定义类型－用作无符号号数转换蓝图的类：
+
+.. code:: csharp
+
+    using System;
+    public class UnitConverter
+    {
+      int ratio;                                                 // Field
+      public UnitConverter (int unitRatio) {ratio = unitRatio; } // Constructor
+      public int Convert   (int unit)    {return unit * ratio; } // Method
+    }
+    class Test
+    {
+      static void Main()
+      {
+        UnitConverter feetToInchesConverter = new UnitConverter (12);
+        UnitConverter milesToFeetConverter  = new UnitConverter (5280);
+        Console.WriteLine (feetToInchesConverter.Convert(30));    // 360
+        Console.WriteLine (feetToInchesConverter.Convert(100));   // 1200
+        Console.WriteLine (feetToInchesConverter.Convert(
+                             milesToFeetConverter.Convert(1)));   // 63360
+      }
+    }
+
+**类型的成员**
+
+一个类型包含数据成员与函数成员。UnitConverter的数据成员是名为ratio的域。UnitConverter的函数成员是Convert方法与UnitConverter的构造函数。
+
+**预定义类型与自定义类型的对称**
+
+C#的一个优美之处就是预定义类型与自定义类型之间几乎没有区别。预定义的int类型作为整数的蓝图，他存储32位数据并且提供使用这个数据的函数成员，例如ToString。类似的，我们自定义的UnitConverter类型作为无符号整数转换的蓝图，他存储数据，ratio，并且提供使用该数据的函数成员。
+
+**构造函数与初始化**
+
+数据是通过实例化一个类型来创建的。预定义的类型可以简单的通过使用字面量来实例化。例如，下面的两行代码实例了两个整数（12与30），用来计算第三个实例x：
+
+.. code:: csharp
+
+    int x = 12 * 30;
+
+当创建自定义类型的新实例时需要使用new操作符。我们可以使用下面的语句来创建并声明一个UnitConverter类型的实例：
+
+.. code:: csharp
+
+    UnitConverter feetToInchesConverter = new UnitConverter (12);
+
+在new操作符实例化一个对象之后，对象的构造函数就会被调用来执行初始化。构造函数的定义类似于方法，所不同的是方法的名字与返回类型简化为类型的名字：
+
+.. code:: csharp
+
+    public class UnitConverter
+    {
+      ...
+      public UnitConverter (int unitRatio) { ratio = unitRatio; }
+      ...
+    }
+
+**实例与静态成员**
+
+在类型的实例上所操作的数据成员与函数成员被称之为实例成员。UnitConverter的Convert方法以及int的ToString方法就是实例成员的示例。默认情况下，类型的成员是实例成员。
+
+并不在类型实例上操作而是在类型本身上操作的数据成员与函数成员必须被标记为static。Test.Main与Console.WriteLine方法就是静态方法。实际上Console类是一个静态类，这就意味着其所有的成员都是静态的。我们实际上不会创建Console的实例，Console是在整个程序中共享的。
+
+为了与静态成员进行对比，在下面的代码中实例域Name属于Panda的一个特定实例，而Population为所有的Panda实例所共有：
+
+.. code:: csharp
+
+    public class Panda
+    {
+      public string Name;             // Instance field
+      public static int Population;   // Static field
+      public Panda (string n)         // Constructor
+      {
+        Name = n;                     // Assign the instance field
+        Population = Population + 1;  // Increment the static Population field
+      }
+    }
+
+下面的代码创建了两个Panda实例，输出他们的名字，并且输出总的数量：
+
+.. code:: csharp
+
+    using System;
+    class Program
+    {
+      static void Main()
+      {
+        Panda p1 = new Panda ("Pan Dee");
+        Panda p2 = new Panda ("Pan Dah");
+        Console.WriteLine (p1.Name);      // Pan Dee
+        Console.WriteLine (p2.Name);      // Pan Dah
+        Console.WriteLine (Panda.Population);   // 2
+      }
+    }
+
+**public关键字**
+
+public关键字向其他的类公开成员。在这个示例中，如果Panda中的Name域不是public的，Test类就不访问这个域。将一个成员标记为public就意味着类型之间的交互：“这些是我希望其他类型可以看到的－其他的所有内容都是我私有的实现细节。”在面向对象的术语中，我们说公有的成员封装了类的私有成员。
+
+转换
+~~~~
+
+C#可以在兼容类型的实例之间进行转换。转换总是由一个已存在的值创建一个新的值。转换可以隐式的或是显示的：隐式的转换是自动发生的，而显示的转换需要转换操作。在下面的示例中，我们隐式的将int类型转换为long类型（容量是int类型的两倍），并且显示的将int转换为short类型（容量为int类型的一半）：
+
+.. code:: csharp
+
+    int x = 12345;       // int is a 32-bit integer
+    long y = x;          // Implicit conversion to 64-bit integer
+    short z = (short)x;  // Explicit conversion to 16-bit integer
+
+只有当下列的两个条件为真时也会发生隐式转换：
+
+-  编译器可以保证转换的成功
+-  在转换为没有信息丢失
+
+相应的，当下列的一个条件为真时需要进行显式转换：
+
+-  编译器不能保证转换总会成功
+-  在转换过程也许会发生信息的丢失
+
+值类型与引用类型
+~~~~~~~~~~~~~~~~
+
+所有的C#类型都可以分为下列几类：
+
+-  值类型
+-  引用类型
+-  泛型参数
+-  指针类型
+
+值类型由大多数的内建类型（特别是所有的数字类型，char类型与bool类型）以及自定义的struct与enum类型构成。
+
+引用类型由所有的类，数组，委托以及接口类型构成。
+
+值类型与引用类型之间的基本区别在于他们在内存中如何处理。
+
+**值类型**
+
+值类型变量或是常量的内容只简单的是一个值。例如，内建的值类型int的内容是一个32位的数据。
+
+我们可以使用struct关键字来自定义值类型（如图2-1）：
+
+.. code:: csharp
+
+    public struct Point { public int X, Y; }
+
+.. figure:: csharp_2_1.png
+   :alt: csharp_2_1.png
+
+   csharp\_2\_1.png
+值类型实例的赋值总是会进行实例拷贝。例如：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Point p1 = new Point();
+      p1.X = 7;
+      Point p2 = p1;             // Assignment causes copy
+      Console.WriteLine (p1.X);  // 7
+      Console.WriteLine (p2.X);  // 7
+      p1.X = 9;                  // Change p1.X
+      Console.WriteLine (p1.X);  // 9
+      Console.WriteLine (p2.X);  // 7
+    }
+
+图2-2显示了p1与p2具有独立的存储空间。
+
+.. figure:: csharp_2_2.png
+   :alt: csharp_2_2.png
+
+   csharp\_2\_2.png
+**引用类型**
+
+引用类型要比值类型复杂得多，他由两部分构成：对象以及对象的引用。引用类型变量或常量的内容是到包含值的对象的引用。下面是使用class来重写我们前面的示例所形成Point类型（如图2-3所示）：
+
+.. code:: csharp
+
+    public class Point{ public int X, Y;}
+
+.. figure:: csharp_2_3.png
+   :alt: csharp_2_3.png
+
+   csharp\_2\_3.png
+赋值引用类型变量会拷贝引用，而不是对象实例。这可以使得多个变量指向同一个对象－并不是普通的值类型。如果我们重复前面的示例，但是现在Point是一个类，对X的操作会影响Y：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Point p1 = new Point();
+      p1.X = 7;
+      Point p2 = p1;             // Copies p1 reference
+      Console.WriteLine (p1.X);  // 7
+      Console.WriteLine (p2.X);  // 7
+      p1.X = 9;                  // Change p1.X
+      Console.WriteLine (p1.X);  // 9
+      Console.WriteLine (p2.X);  // 9
+    }
+
+图2-4显示了p1与p2是指向同一个对象的两个引用。
+
+.. figure:: csharp_2_4.png
+   :alt: csharp_2_4.png
+
+   csharp\_2\_4.png
+**Null**
+
+引用可以被赋值为字面量null，表明引用并没有指向任何对象：
+
+.. code:: csharp
+
+    class Point {...}
+    ...
+    Point p = null;
+    Console.WriteLine (p == null);   // True
+    // The following line generates a runtime error
+    // (a NullReferenceException is thrown):
+    Console.WriteLine (p.X);
+
+相应的，值类型不能被赋值为null值：
+
+.. code:: csharp
+
+    struct Point {...}
+    ...
+    Point p = null;  // Compile-time error
+    int x = null;    // Compile-time error
+
+**存储花费**
+
+值类型会精确的占用存储其数据域所需要内存。在下面的示例中，Point需要八个字节的内存：
+
+.. code:: csharp
+
+    struct Point
+    {
+      int x;  // 4 bytes
+      int y;  // 4 bytes
+    }
+
+引用类型需要为引用与对象单独分配内存。对象需要的内存数量为其内部成员所需要内存数量加上额外的花费。确切的内存消耗是.NET运行时所固有的，但是最小的花费是八个字节，用于存储对象类型的键以及临时信息，例如多线程时的锁定状态以及标识其是否为GC所移动的标记。每一个对象的引用需要额外的4个或8个字节，这依据于.NET是运行在32位还是64位平台上。
+
+预定义的类型分类
+~~~~~~~~~~~~~~~~
+
+C#中预定义的类型为：
+
+值类型
+
+-  数字
+
+   -  带符号整数（sbyte，short，int，long）
+   -  无符号整数（byte，ushort，uint，ulong）
+   -  实数（float，double，decimal）
+
+-  逻辑值（bool）
+-  字符（char）
+
+引用类型
+
+-  字符串（string）
+-  对象（object）
+
+C#中预定义的类型是System名字空间中框架类型的别名。在下面的两条语句之间只有语法上的不同：
+
+.. code:: csharp
+
+    int i = 5;
+    System.Int32 i = 5;
+
+除了decimal的预定义值类型集合被称之为CLR中的基本类型。之所以被称之为基本类型是因为他是由编译代码的结构所直接支持的，并且这通常转换为底层处理器的直接支持。例如：
+
+.. code:: csharp
+
+                       // Underlying hexadecimal representation
+    int i = 7;         // 0x7
+    bool b = true;     // 0x1
+    char c = 'A';      // 0x41
+    float f = 0.5f;    // uses IEEE floating-point encoding
+
+System.IntPtr与System.UIntPtr类型也是基本类型。
+
+数值类型
+--------
+
+C#的预定义数值类型显示在表2-1中。
+
+.. figure:: csharp_table_2_1.png
+   :alt: csharp_table_2_1.png
+
+   csharp\_table\_2\_1.png
+在整数类型中，int与long是一等臣民，并且同时为C#与运行时所喜欢。其他的整数类型通常用于交互或是有足够的空间时所用。
+
+在实数类型中，float与double通常被称之为浮点类型并且通常用于科学计算。decimal类型通常用于基于10的数学以及需要高精度的财务计算。
+
+数值字面量
+~~~~~~~~~~
+
+整数字面量可以使用十进制或是十六进制形式；十六进制以0x前缀来表示。例如：
+
+.. code:: csharp
+
+    int x = 127;
+    long y = 0x7F;
+
+实数字面量可以使用十进制或是幂次形式来表示。例如：
+
+.. code:: csharp
+
+    double d = 1.5;
+    double million = 1E06;
+
+**数值字面量类型推测**
+
+默认情况下，编译器会将数值字面量推测为double或是一个整数类型：
+
+-  如果字面量包含一个十进制小数点或是幂次符号（E），则推测为double。
+-  否则，字面量类型是列表中可以满足字面量值的第一个类型：int，unit，long与ulong。
+
+例如：
+
+.. code:: csharp
+
+    Console.WriteLine (        1.0.GetType());  // Double  (double)
+    Console.WriteLine (       1E06.GetType());  // Double  (double)
+    Console.WriteLine (          1.GetType());  // Int32   (int)
+    Console.WriteLine ( 0xF0000000.GetType());  // UInt32  (uint)
+
+**数值后缀**
+
+数值后缀显示的定义了字面量的类型。后缀可以为小写或是大写形式，可用的后缀如下表示：
+
+.. figure:: csharp_2_suffix.png
+   :alt: csharp_2_suffix.png
+
+   csharp\_2\_suffix.png
+后缀U与L并不是必须的，因为uint，long与ulong类型总是可以被推测出来或是由int隐式转换：
+
+.. code:: csharp
+
+    long i = 5;     // Implicit lossless conversion from int literal to long
+
+D后缀在技术上是冗余的，因为所有带有十进制小数点的字面量都可以被推测为double。而我们总是可以向数值字面量添加小数点：
+
+.. code:: csharp
+
+    double x = 4.0;
+
+F与M后缀是最经常用到的，并且应用在指定float与decimal字面量的情况。如果没有F后缀，下面的代码行不会通过编译，因为4.5可以被推测为double类型，而double并不能隐式的转换为float：
+
+.. code:: csharp
+
+    float f = 4.5F;
+
+对于十进制字面量也是如此：
+
+.. code:: csharp
+
+    decimal d = ?1.23M;     // Will not compile without the M suffix.
+
+我们将会在接下来的章节中详细描述数值转换的语义。
+
+数值转换
+~~~~~~~~
+
+**整数到整数的转换**
+
+当目标类型可以表示源类型的所有值时，整数转换是隐式进行的。否则，则需要使用显式转换。例如：
+
+.. code:: csharp
+
+    int x = 12345;       // int is a 32-bit integral
+    long y = x;          // Implicit conversion to 64-bit integral
+    short z = (short)x;  // Explicit conversion to 16-bit integral
+
+**浮点数到浮点数的转换**
+
+float可以隐式转换为double，因为double可以表示float的所有值。相反的转换必须显示进行。
+
+**浮点到整数的转换**
+
+所有的整数类型可以隐式的转换为所有的浮点类型：
+
+.. code:: csharp
+
+    int i = 1;
+    float f = i;
+
+相反的转换必须显示进行：
+
+.. code:: csharp
+
+    int i2 = (int)f;
+
+隐式的将一个大的整数类型转换为浮点类型可以保留量级（magnitude），但也许会丢失精度。这是因为浮点类型要比整数类型具有更大的量级，但是也许会具有较小的精度。使用大数字重写我们的代码如下：
+
+.. code:: csharp
+
+    int i1 = 100000001;
+    float f = i1;          // Magnitude preserved, precision lost
+    int i2 = (int)f;       // 100000000
+
+**十进制转换**
+
+所有的整数类型都可以隐式的转换为十进制类型，因为十进制类型可以表示C#整数值的所有可能值。其他的数值类型转换为十进制类型或是由十进制类型转换为其他数值类型必须显示进行。
+
+算术操作符
+~~~~~~~~~~
+
+C#为8位与16位整数以外的所有数值类型定义了算术操作符（+，-，\*，/，%）：
+
+-  + 相加
+-  - 相减
+-  
+
+   -  相乘
+
+-  / 相除
+-  % 取模
+
+自加与自减操作符
+~~~~~~~~~~~~~~~~
+
+自加与自减操作符(++,
+--)会将数值类型加1或减1。操作符可以在变量前也可以在变量后，这依据于我们是否希望表达式在计算之前更新变量。例如：
+
+.. code:: csharp
+
+    int x = 0;
+    Console.WriteLine (x++);   // Outputs 0; x is now 1
+    Console.WriteLine (++x);   // Outputs 2; x is now 2
+    Console.WriteLine (--x);   // Outputs 1; x is now 1
+
+特殊的整数操作
+~~~~~~~~~~~~~~
+
+**整数相除**
+
+在整数类型上的相除操作总是会去掉余数。使用值为0的变量相除会生成运行时错误（DivideByZeroException）：
+
+.. code:: csharp
+
+    int a = 2 / 3;      // 0
+    int b = 0;
+    int c = 5 / b;      // throws DivisionByZeroException
+
+使用字面量0相除会生成编译时错误。
+
+**整数溢出**
+
+运行时，整数类型上的算术操作会产生溢出。默认情况下，这会悄悄发生，不会抛出异常。尽管C#规范并没有指明溢出的结果，而CLR总会引起包装行为。例如，在最小可能的int值上减1会导致最大可能的int值：
+
+.. code:: csharp
+
+    int a = int.MinValue;
+    a--;
+    Console.WriteLine (a == int.MaxValue); // True
+
+**整数算术溢出检测操作符**
+
+checked操作符可以在整数表达式或是语句超出类型的算术限制时通知运行时产生OverflowException，而不是静默处理。checked操作可以影响使用++，--，+，-（双目与单目），\*，/以及在整数类型之间显示转换操作符的表达式。
+
+checked操作可以用在表达式或是语句块的周围。例如：
+
+.. code:: csharp
+
+    int a = 1000000;
+    int b = 1000000;int c = checked (a * b);      // Checks just the expression.
+    checked                       // Checks all expressions
+    {                             // in statement block.
+       ...
+       c = a * b;
+       ...
+    }
+
+我们可以通过使用/checked+命令行开关编译来为程序中的所有表达式启用算术溢出检测。如果我们需要为特定的表达式或是语句禁止溢出检测，我们可以使用unchecked操作符。例如，下面的代码不会抛出异常－尽管他是使用/checked+来编译的：
+
+.. code:: csharp
+
+    int x = int.MaxValue;
+    int y = unchecked (x + 1);
+    unchecked { int z = x + 1; }
+
+**为常量表达式进行溢出检测**
+
+无论是否指定了/checked编译器开关，编译时的表达式计算总是会进行溢出检测－除非我们应用了unchecked操作符：
+
+.. code:: csharp
+
+    int x = int.MaxValue + 1;               // Compile-time error
+    int y = unchecked (int.MaxValue + 1);   // No errors
+
+**位操作符**
+
+C#支持下列的位操作符：
+
+.. figure:: csharp_2_bitwise.png
+   :alt: csharp_2_bitwise.png
+
+   csharp\_2\_bitwise.png
+8位与16位整数
+~~~~~~~~~~~~~
+
+8位与16位的整数类型是byte，sbyte，short与ushort。这些类型缺少他们自己的算术操作符，所以C#会在需要时将他们转换为较大的类型。当尝试将转换后的结果赋值给一个较小的整数类型时会产生编译时错误：
+
+.. code:: csharp
+
+    short x = 1, y = 1;
+    short z = x + y;          // Compile-time error
+
+在上面的示例中，x与y被隐式转换为int，从而可以进行加法运算。这就意味着结果也是一个int，他不可以隐式的转换为short（因为这会导致数据的丢失）。要使其通过编译，我们必须使用显式转换：
+
+.. code:: csharp
+
+    short z = (short) (x + y);   // OK
+
+特殊的float与double值
+~~~~~~~~~~~~~~~~~~~~~
+
+与整数类型不同，浮点类型有一些特殊的值。这些特殊的值是NaN（非数字），+无穷，-无穷与-0。float与double类具有一些用于NaN，+无穷，-无穷以及其他值（MaxValue，MinValue与Epsilon）的常量。例如：
+
+.. code:: csharp
+
+    Console.WriteLine (double.NegativeInfinity);   // -Infinity
+
+double与float用于表示特殊值的常量如下所示：
+
+.. figure:: csharp_2_floatdouble.png
+   :alt: csharp_2_floatdouble.png
+
+   csharp\_2\_floatdouble.png
+将一个非零值除以零会导致一个无穷值。例如：
+
+.. code:: csharp
+
+    Console.WriteLine ( 1.0 /  0.0);                  //  Infinity
+    Console.WriteLine (?1.0 /  0.0);                  // -Infinity
+    Console.WriteLine ( 1.0 / ?0.0);                  // -Infinity
+    Console.WriteLine (?1.0 / ?0.0);                  //  Infinity
+
+零除以零或是无穷减无穷会导致一个NaN。例如：
+
+.. code:: csharp
+
+    Console.WriteLine ( 0.0 /  0.0);                  //  NaN
+    Console.WriteLine ((1.0 /  0.0) ? (1.0 / 0.0));   //  NaN
+
+当使用==时，NaN不等于任何值，也不等于NaN：
+
+.. code:: csharp
+
+    Console.WriteLine (0.0 / 0.0 == double.NaN);    // False
+
+要测试一个值是否为NaN，我们必须使用float.IsNaN或是double.IsNaN方法：
+
+.. code:: csharp
+
+    Console.WriteLine (double.IsNaN (0.0 / 0.0));   // True
+
+然而，当使用object.Equals方法时，两个NaN的值是相等的：
+
+.. code:: csharp
+
+    Console.WriteLine (object.Equals (0.0 / 0.0, double.NaN));   // True
+
+float与double遵循IEEE754格式类型规范，并为大多数的处理器所支持。
+
+double与decimal
+~~~~~~~~~~~~~~~
+
+double对于科学计算十分有用（例如计算空间坐标）。decimail.
+对于财务计算以及人造值而不是真实世界的测量结果十分有用。下面是他们之间的区别：
+
+.. figure:: csharp_2_doubledecimal.png
+   :alt: csharp_2_doubledecimal.png
+
+   csharp\_2\_doubledecimal.png
+实数近似错误
+~~~~~~~~~~~~
+
+float与double在内部表示基为2的数字。正是由于这个原因，只有可以表示为基为2的数字也会被精确的表示。实际上，这就意味着大多数带有分数的字面量（基为10）不会被精确的表示。例如：
+
+.. code:: csharp
+
+    float tenth = 0.1f;                       // Not quite 0.1
+    float one   = 1f;
+    Console.WriteLine (one - tenth * 10f);    // ?1.490116E-08
+
+这就是为什么float与double不能用于财务计算的原因。相应的，decimal以10底，而可以精确的表示以10为底的数字（及其因子，以2和5为底）。因为实数字面量以10为底，decimal可以精确的表示例如0.1这样的数字。然而，double与decimal都不能精确表示底为10的循环小数：
+
+.. code:: csharp
+
+    decimal m = 1M / 6M;               // 0.1666666666666666666666666667M
+    double  d = 1.0 / 6.0;             // 0.16666666666666666
+
+这会导致近似错误：
+
+.. code:: csharp
+
+    decimal notQuiteWholeM = m+m+m+m+m+m;  // 1.0000000000000000000000000002M
+    double  notQuiteWholeD = d+d+d+d+d+d;  // 0.99999999999999989
+
+这会破坏相等与比较操作：
+
+.. code:: csharp
+
+    Console.WriteLine (notQuiteWholeM == 1M);   // False
+    Console.WriteLine (notQuiteWholeD < 1.0);   // True
+
+布尔类型与操作符
+----------------
+
+C#的bool类型（System.Boolean类型的别名）是可以使用字面量true与false赋值的逻辑值。
+
+尽管一个布尔值只需要一位存储，但是运行时会使用一个字节的内存，因为这是运行时与处理器可以高效操作的最小内存块。为了避免数组情况下空间利用率低的问题，框架在System.Collections名字空间中提供了BitArray类，这是专门设计为每个布尔值使用1位存储。
+
+布尔转换
+~~~~~~~~
+
+在布尔类型与数值类型之间不能进行转换。
+
+相等与比较运算符
+~~~~~~~~~~~~~~~~
+
+==与!=用于测试类型的相等与不等，但总会返回一个bool值。值类型通常具有一个非常简单的相等的概念：
+
+.. code:: csharp
+
+    int x = 1;
+    int y = 2;
+    int z = 1;
+    Console.WriteLine (x == y);         // False
+    Console.WriteLine (x == z);         // True
+
+对于引用类型，默认情况下相等是基于引用，而不是底层对象的实际值：
+
+.. code:: csharp
+
+    public class Dude
+    {
+      public string Name;
+      public Dude (string n) { Name = n; }
+    }
+    ...
+    Dude d1 = new Dude ("John");
+    Dude d2 = new Dude ("John");
+    Console.WriteLine (d1 == d2);       // False
+    Dude d3 = d1;
+    Console.WriteLine (d1 == d3);       // True
+
+相等与比较操作符，==，!=，<，>，>=，<=可以适用于所有的数值类型，但是对于实数需要小心使用。比较操作符也可以应用在enum类型成员之上，通过比较其底层整数值实现。
+
+条件操作符
+~~~~~~~~~~
+
+&&与!!操作测试与与或条件。他们经常与!操作符结合使用，后者表示非。在这个示例中，如果是雨天或是晴天，只要不是风天，UserUmbrella方法就会返回true：
+
+.. code:: csharp
+
+    static bool UseUmbrella (bool rainy, bool sunny, bool windy)
+    {
+      return !windy && (rainy || sunny);
+    }
+
+当可能时，&&与\|\|会进行短路计算。在前面的例子中，如果是风天，表达式（rainy\|\|sunny）就不会进行计算。短路的本质是使得表达式（如下面的表达式）运行而不会抛出NullReferenceException：
+
+.. code:: csharp
+
+    if (sb != null && sb.Length > 0) ...
+
+&与\|操作也可以测试与与或条件：
+
+.. code:: csharp
+
+    return !windy & (rainy | sunny);
+
+他们之间的区别就在于后者不会短路。正是由于这个原因，他们很少在条件运算符中使用。
+
+三目条件运算符（简单的称之为条件运算符）的格式为q?a:b，也就是如果条件q为真则计算a，否则计算b。例如：
+
+.. code:: csharp
+
+    static int Max (int a, int b)
+    {
+      return (a > b) ? a : b;
+    }
+
+条件运算符在LINQ查询中特别有用。
+
+字符串与字符
+------------
+
+C#的char类型（System.Char类型的别名）表示一个Unicode字符并且占用两个字节。char字面量在单引号中指定：
+
+.. code:: csharp
+
+    char c = 'A';       // Simple character
+
+转义字符表示不可以表达或是按字面量解释的字符。一个转义序列由反斜线后跟一个具有特殊意义的字符表示。例如：
+
+.. code:: csharp
+
+    char newLine = '\n';
+    char backSlash = '\\';
+
+转义字符显示在表2-2中。
+
+.. figure:: csharp_table_2_2.png
+   :alt: csharp_table_2_2.png
+
+   csharp\_table\_2\_2.png
+\\u（或是\\x）转义序列可以让我们以其四位十六进制代码来指定任意的Unicode字符：
+
+.. code:: csharp
+
+    char copyrightSymbol = '\u00A9';
+    char omegaSymbol     = '\u03A9';
+    char newLine         = '\u000A';
+
+字符转换
+~~~~~~~~
+
+由char到数值类型的隐式转换适用于可以适应于一个无符号short的数值类型。对于其他的数值类型，需要显式转换。
+
+字符串类型
+~~~~~~~~~~
+
+C#的字符串类型（System.String类型的别名）表示一个不可修改的Unicode字符序列。字符串字面量在双引号中进行指定：
+
+string a = "Heat";
+
+可以应用char字面量的转义序列也可以应用于字符串之中：
+
+string a = "Here's a tab:\\t";
+
+这样的代价就是当我们需要反斜线的字面量时我们必须书写两次：
+
+string a1 = "\\\\\\\\server\\\\fileshare\\\\helloworld.cs";
+
+为了避免这一问题，C#允许逐字的字符串字面量。逐字的字符串字面量以@为前缀并且不支持转义序列。下面的逐字字符串与前面的字符串相同：
+
+string a2 = @ "\\\\server\\fileshare\\helloworld.cs";
+
+逐字的字符串字面量也可以跨越多行：
+
+.. code:: csharp
+
+    string escaped  = "First Line\r\nSecond Line";
+    string verbatim = @"First Line
+    Second Line";
+    // Assuming your IDE uses CR-LF line separators:
+    Console.WriteLine (escaped == verbatim);  // True
+
+我们可以通过在逐字字符串字面量中书写两次来包含双引号字符：
+
+string xml = @"";
+
+**字符串联合**
+
++操作符可以联合两个字符串：
+
+string s = "a" + "b";
+
+右边的操作数也许是一个非字符串的值，在这种情况下会调用此值的ToString方法。例如：
+
+.. code:: csharp
+
+    string s = "a" + 5;  // a5
+
+因为字符串是不可修改的，使用+操作符重复构建一个字符串效率非常低：一个更好的解决方案是使用System.Text.StringBuillder类型。
+
+**字符串比较**
+
+string并不支持用于比较的操作符。我们必须使用字符串的CompareTo方法。
+
+数组
+----
+
+数组表示某个特定类型的确定数目的元素。数组中的元素总是存储在一个连续的内存块中，从而提供高效的访问。
+
+数组使用元素类型之后的方括号来表示。例如：
+
+char[] vowels = new char[5]; // Declare an array of 5 characters
+
+方括号同时对数组进行索引，通过位置访问特定的元素：
+
+.. code:: csharp
+
+    vowels [0] = 'a';
+    vowels [1] = 'e';
+    vowels [2] = 'i';
+    vowels [3] = 'o';
+    vowels [4] = 'u';
+    Console.WriteLine (vowels [1]);      // e
+
+这会输出“e”，因为数组元素是由0开始的。我们可以使用for循环语句来遍历数组中的每一个元素。这个示例中的for循环整数i由0循环到4：
+
+.. code:: csharp
+
+    for (int i = 0; i < vowels.Length; i++)
+      Console.Write (vowels [i]);            // aeiou
+
+数组的Length属性返回数组中元素的数目。一旦数组被创建，其长度就不能正修改。System.Collection名字空间以及子空间中提供了更高级的数据结构，例如动态变化尺寸的数组与字典。
+
+数组初始化表达式指定了数组中的每一个元素。例如：
+
+char[] vowels = new char[] {'a','e','i','o','u'};
+
+或是简单的：
+
+char[] vowels = {'a','e','i','o','u'};
+
+所有的数组都是由System.Array类继承来的，他为所有的数组提供了共同的服务。这些成员包括获取与设置数组元素的方法。
+
+默认元素初始化
+~~~~~~~~~~~~~~
+
+创建数组总是使用默认值对数组元素进行预初始化。类型的默认值是内存位清零的结果。例如，考虑创建一个整数的数组。因为int是一个值类型，这会在一个连续的内存块中分配1000个整数。每个元素的默认值为0：
+
+.. code:: csharp
+
+    int[] a = new int[1000];
+    Console.Write (a[123]);            // 0
+
+**值类型与引用类型**
+
+数组元素的类型值类型还是引用类型对程序有着较大的性能影响。当元素类型是值类型时，每一个元素值作为数组的一部分进行分配。例如：
+
+.. code:: csharp
+
+    public struct Point { public int X, Y; }
+    ...
+    Point[] a = new Point[1000];
+    int x = a[500].X;                  // 0
+
+如果Point是一个类，创建数组则会分配1000个空引用：
+
+.. code:: csharp
+
+    public class Point { public int X, Y; }
+    ...
+    Point[] a = new Point[1000];
+    int x = a[500].X;                  // Runtime error, NullReferenceException
+
+为了避免这种错误，我们必须在初始化数组之后显示初始化1000个Point：
+
+.. code:: csharp
+
+    Point[] a = new Point[1000];
+    for (int i = 0; i < a.Length; i++) // Iterate i from 0 to 999
+       a[i] = new Point();             // Set array element i with new point
+
+数组本身总是一个引用类型对象，而无论元素类型是什么。例如，下面的语句是合法的：
+
+.. code:: csharp
+
+    int[] a = null;
+
+多维数组
+~~~~~~~~
+
+多维数组有两种变化：矩形（rectangular）与锯齿（jagged）数组。矩形数组代表n维的内存块，而锯齿数组是数组的数组。
+
+**矩形数组**
+
+矩形数组的声明使用逗号来分隔每个维度。下面的语句声明了一个二维的矩形数组，其中的维度为3x3：
+
+.. code:: csharp
+
+    int [,] matrix = new int [3, 3];
+
+数组的GetLength方法返回指定维度的长度（由0开始）：
+
+.. code:: csharp
+
+    for (int i = 0; i < matrix.GetLength(0); i++)
+      for (int j = 0; j < matrix.GetLength(1); j++)
+        matrix [i, j] = i * 3 + j;
+
+矩形数组可以使用下面的语句进行初始化（这个示例中的每一个元素都被初始化为与前面示例相同的值）：
+
+.. code:: csharp
+
+    int[,] matrix = new int[,]
+    {
+      {0,1,2},
+      {3,4,5},
+      {6,7,8}
+    };
+
+    '''锯齿数组'''
+
+    锯齿数组的声明使用连续的方括号来表示每一个维度。下面是一个声明二维锯齿数组的例子，其中最外层的维度为3：
+
+    int [][] matrix = new int [3][];
+
+    在这个声明中并没有指定内层的维度。与矩形数组不同，每一个内层数组可以是不确定的长度。每一个内层数组被隐式的初始化为null，而不是空数组。每一个内层数组必须手动创建：
+
+    <syntaxhighlight lang="csharp">
+    for (int i = 0; i < matrix.Length; i++)
+    {
+      matrix[i] = new int [3];                    // Create inner array
+      for (int j = 0; j < matrix[i].Length; j++)
+        matrix[i][j] = i * 3 + j;
+    }
+
+锯齿数组可以使用下面的语句进行初始化：
+
+.. code:: csharp
+
+    int[][] matrix = new int[][]
+    {
+      new int[] {0,1,2},
+      new int[] {3,4,5},
+      new int[] {6,7,8}
+    };
+
+简化数组初始化表达式
+~~~~~~~~~~~~~~~~~~~~
+
+有两种方法可以简化数组初始化表达式。第一种方法就是忽略new操作符与类型标识符：
+
+.. code:: csharp
+
+    char[] vowels = {'a','e','i','o','u'};
+    int[,] rectangularMatrix =
+    {
+      {0,1,2},
+      {3,4,5},
+      {6,7,8}
+    };
+    int[][] jaggedMatrix =
+    {
+      new int[] {0,1,2},
+      new int[] {3,4,5},
+      new int[] {6,7,8}
+    };
+
+第二种方法就是使用var关键字，这会通知编译器隐式输入一个局部变量：
+
+.. code:: csharp
+
+    var i = 3;           // i is implicitly of type int
+    var s = "sausage";   // s is implicitly of type string
+    // Therefore:
+    var rectMatrix = new int[,]    // rectMatrix is implicitly of type int[,]
+    {
+      {0,1,2},
+      {3,4,5},
+      {6,7,8}
+    };
+    var jaggedMat = new int[][]    // jaggedMat is implicitly of type int[][]
+    {
+      new int[] {0,1,2},
+      new int[] {3,4,5},
+      new int[] {6,7,8}
+    };
+
+隐式输入可以在一维数组上利用得更为深入。我们可以在new关键字后忽略类型标识符并且使得编译器推测数组类型：
+
+var vowels = new[] {'a','e','i','o','u'}; // Compiler infers char[]
+
+为了使得隐式数组输入正常工作，元素必须可以隐式的转换为单一类型：
+
+var x = new[] {1,10000000000}; // all convertible to long
+
+边界检测
+~~~~~~~~
+
+所有的数组索引都由运行时进行边界检测。如果我们使用不正确的索引，则会抛出IndexOutOfRangeException：
+
+.. code:: csharp
+
+    int[] arr = new int[3];
+    arr[3] = 1;               // IndexOutOfRangeException thrown
+
+与Java类似，边界检测对于类型安全与简化调试是必须的。
+
+变量与参数
+----------
+
+变量表示具有可修改值的存储位置。变量可以是局部变量，参数（value,ref,out)，域（实例或静态）或是数组元素。
+
+栈与堆
+~~~~~~
+
+栈与堆是变量与常量所在的位置。每一个都具有不同的生命周期语义。
+
+**栈**
+
+栈是用于存储局部变量与参数的内存块。随着进入函数与退出函数，栈会在逻辑上增长与缩小。考虑下面的方法：
+
+.. code:: csharp
+
+    static int Factorial (int x)
+    {
+      if (x == 0) return 1;
+      return x * Factorial (x-1);
+    }
+
+这个方法是递归的，意味着他会调用其自身。每次进入方法时，就会在栈上分配一个新的int，而每次退出方法时，int就会被删除。
+
+**堆**
+
+堆是对象所在的内存块。当一个新对象被创建时，他会在堆上创建，并且返回对象的引用。在程序运行过程中，随着新对象被创建，堆开始被填满。运行时有一个垃圾收集器定时的由堆上删除对象，从而我们的计算机不会耗尽所有的内存。一旦没有引用指向对象，则对象就可以被删除。
+
+在下面的示例中，我们创建一个通过变量ref1来引用的StringBuilder对象，并且输出其内容。然后StringBuilder对象立即就可以进行垃圾收集，因为并没有后续的操作使用这个对象。
+
+然后，我们创建另一个通过变量ref2引用的StringBuilder对象，并且将这个引用拷贝到ref3。尽管在此以后ref2并没有被使用，ref3会使得相同的StringBuilder对象保持存活，从而保证该对象不会为垃圾收集器回收，直到我们完成ref3的使用。
+
+.. code:: csharp
+
+    using System;
+    using System.Text;
+    class Test
+    {
+      static void Main()
+      {
+        StringBuilder ref1 = new StringBuilder ("object1");
+        Console.WriteLine (ref1);
+        // The StringBuilder referenced by ref1 is now eligible for GC.
+        StringBuilder ref2 = new StringBuilder ("object2");
+        StringBuilder ref3 = ref2;
+        // The StringBuilder referenced by ref2 is NOT yet eligible for GC.
+        Console.WriteLine (ref3);                   // object2
+      }
+    }
+
+值类型实例（以及对象引用）会在变量被声明时开始生命周期。如果实例被声明为对象内部的一个域，或是作为一个数组元素，该实例就会存活在堆上。
+
+堆同时存储静态域与常量。与在堆上分配的对象不同（可以进行垃圾回收），他们程序退出之后一直存在。
+
+明确赋值
+~~~~~~~~
+
+C#强制明确赋值策略。实践中，这就意味着在unsafe的环境以外，访问未初始化的内存是不可能的。确定赋值有三个含义：
+
+-  局部变量在被读取之前必须赋值
+-  当方法被调用时必须提供函数参数
+-  所有其他的变量（例如域与数组元素）会被运行时自动初始化
+
+例如，下面的代码会导致运行时错误：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      int x;
+      Console.WriteLine (x);        // Compile-time error
+    }
+
+域与数组元素会使用其类型的默认值进行初始化。下面的代码会输出0，因为数组被隐式的赋值为默认值：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      int[] ints = new int[2];
+      Console.WriteLine (ints[0]);    // 0
+    }
+
+下面的代码会输出0，因为域被隐式的赋值为默认值：
+
+.. code:: csharp
+
+    class Test
+    {
+      static int x;
+      static void Main() { Console.WriteLine (x); }   // 0
+    }
+
+默认值
+~~~~~~
+
+所有的类型实例都有默认值。预定义类型的默认值是内存位清零的结果：
+
+.. figure:: csharp_2_defaultvalues.png
+   :alt: csharp_2_defaultvalues.png
+
+   csharp\_2\_defaultvalues.png
+我们可以使用default关键字获取任意类型的默认值：
+
+decimal d = default (decimal);
+
+自定义值类型中的默认值（例如struct）与自定义类型的域的默认值相同。
+
+参数
+~~~~
+
+方法有一个参数序列。参数定义了必须提供给方法的参数集合。在这个示例中，Foo方法有一个名为p的int类型参数：
+
+.. code:: csharp
+
+    static void Foo (int p)
+    {
+      p = p + 1;                // Increment p by 1
+      Console.WriteLine(p);     // Write p to screen
+    }
+    static void Main() { Foo (8); }
+
+我们可以使用ref与out修饰符来控制如何传递参数：
+
+.. figure:: csharp_2_parameter.png
+   :alt: csharp_2_parameter.png
+
+   csharp\_2\_parameter.png
+**按值传递参数**
+
+默认情况下，C#中的参数是按值传递的，这是到目前为止最普通的形式。这就意味着传递给方法会创建一个值的拷贝：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Foo (int p)
+      {
+        p = p + 1;                // Increment p by 1
+        Console.WriteLine (p);    // Write p to screen
+      }
+      static void Main()
+      {
+        int x = 8;
+        Foo (x);                  // Make a copy of x
+        Console.WriteLine (x);    // x will still be 8
+      }
+    }
+
+为p赋一个新值并不会改变x的内容，因为p与x位于不同的内存地址。
+
+按值传递引用类型的参数会拷贝引用，而不是拷贝对象。在下面的示例中，Foo与Main实例会看到相同的StringBuilder对象，但是却有不同的引用。换句话说，sb与fooSB是指向相同StringBuilder
+对象的不同引用：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Foo (StringBuilder fooSB)
+      {
+        fooSB.Append ("test");
+        fooSB = null;
+      }
+      static void Main()
+      {
+        StringBuilder sb = new StringBuilder();
+        Foo (sb);
+        Console.WriteLine (sb.ToString());    // test
+      }
+    }
+
+因为fooSB是一个引用的拷贝，将其设置为null并不使得sb变为null。（然而如果需要这样，fooSB会使用ref修饰符进行声明与调用，sb就会变为null。）
+
+**ref修饰符**
+
+要按引用传递，C#提供了ref参数修饰符。在下面的示例中，p与x与指向的内存地址：
+
+.. code:: csharp
+
+    clss Test
+    {
+      static void Foo (ref int p)
+      {
+        p = p + 1;               // Increment p by 1
+        Console.WriteLine (p);   // Write p to screen
+      }
+      static void Main()
+      {
+        int x = 8;
+        Foo (ref  x);            // Ask Foo to deal directly with x
+        Console.WriteLine (x);   // x is now 9
+      }
+    }
+
+现在为p赋一个新值就会改变x的内容。注意，当输出与调用方法如何需要ref修饰符。这就使得程序的目的清晰明白。
+
+ref修饰可以用来实现交换方法：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Swap (ref string a, ref string b)
+      {
+        string temp = a;
+        a = b;
+        b = temp;
+      }
+      static void Main()
+      {
+        string x = "Penn";
+        string y = "Teller";
+        Swap (ref x, ref y);
+        Console.WriteLine (x);   // Teller
+        Console.WriteLine (y);   // Penn
+      }
+    }
+
+**out修饰符**
+
+out参数类似于ref参数，所不同的是：
+
+-  在进入方法之前不需要被赋值
+-  在离开方法之前必须被赋值
+
+out修饰符经常用来由方法中返回多个值。例如：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Split (string name, out string firstNames,
+                         out string lastName)
+      {
+         int i = name.LastIndexOf (' ');
+         firstNames = name.Substring (0, i);
+         lastName   = name.Substring (i + 1);
+      }
+      static void Main()
+      {
+        string a, b;
+        Split ("Stevie Ray Vaughn", out a, out b);
+        Console.WriteLine (a);                      // Stevie Ray
+        Console.WriteLine (b);                      // Vaughn
+      }
+    }
+
+类似于ref参数，out参数是按引用传递的。
+
+**按引用传递的含义**
+
+当我们按引用传递参数时，我们是将一个已存在的变量的存储位置进行重新命名，而不是创建一个新的存储位置。在下面的示例中，变量x与变量y表示相同的实例：
+
+.. code:: csharp
+
+    class Test
+    {
+      static int x;
+      static void Main() { Foo (out x); }
+      static void Foo (out int y)
+      {
+        Console.WriteLine (x);                // x is 0
+        y = 1;                                // Mutate y
+        Console.WriteLine (x);                // x is 1
+      }
+    }
+
+**params修饰符**
+
+params参数修饰符可以在方法的最后一个参数上指定，从而方法可以接受任意数目的特定类型的参数。参数类型必须声明为数组。例如：
+
+.. code:: csharp
+
+    class Test
+    {
+      static int Sum (params int[] ints)
+      {
+        int sum = 0;    
+        for (int i = 0; i < ints.Length; i++)
+          sum += ints[i];                       // Increase sum by ints[i]
+        return sum;
+      }
+      static void Main()
+      {
+        int total = Sum (1, 2, 3, 4);
+        Console.WriteLine (total);              // 10
+      }
+    }
+
+我们也可以在普通的数组上使用params参数。Main中的第一行代码在语义上与下面的代码等同：
+
+int total = Sum (new int[] { 1, 2, 3, 4 } );
+
+**可选参数（C# 4.0）**
+
+在C#
+4.0中，方法，构造函数以及索引器都可以声明可选参数。如果一个参数在其声明中指定了默认值则是可选参数：
+
+.. code:: csharp
+
+    void Foo (int x = 23) { Console.WriteLine (x); }
+
+当调用方法时可以忽略可选参数：
+
+Foo(); // 23
+
+默认参数23实际上被传递给可选参数x，编译器会在调用时将值23编译进代码。前面Foo方法的调用在语义上与下面的代码相同：
+
+Foo (23);
+
+因为编译器会简单的替换可选参数的默认值。
+
+可选参数的默认值必须指定为常量表达式，或是值类型无需参数的构造函数。可选参数不能使用ref或是out标记。
+
+在方法声明与方法调用中，强制参数必须出现在可选参数的前面（params参数例外，他总是出现在最后）。在下面的示例中，显式值1被传递给x，而默认值0被传递给y：
+
+.. code:: csharp
+
+    void Foo (int x = 0, int y = 0) { Console.WriteLine (x + ", " + y); }
+    void Test()
+    {
+      Foo(1);    // 1, 0
+    }
+
+要进行相反的操作（将默认值传递给x而显示值传递y），我们必须使用命名参数组合可选参数。
+
+**命名参数（C# 4.0）**
+
+除了通过位置标记参数以外，我们还可以通过名字标记参数。例如：
+
+.. code:: csharp
+
+    void Foo (int x, int y) { Console.WriteLine (x + ", " + y); }
+    void Test()
+    {
+      Foo (x:1, y:2);  // 1, 2
+    }
+
+命名参数可以以任意顺序出现。下面对Foo的调用在语义上是相同的：
+
+.. code:: csharp
+
+    Foo (x:1, y:2);
+    Foo (y:2, x:1);
+
+我们可以混合使用命名参数与位置参数：
+
+Foo (1, y:2);
+
+然而有一个限制：位置参数必须出现在命名参数之前。所以我们不能使用下面的代码来调用Foo：
+
+Foo (x:1, 2); // Compile-time error
+
+命名参数在与可选参数组合时特别有用。例如，考虑下面的方法：
+
+void Bar (int a = 0, int b = 0, int c = 0, int d = 0) { ... }
+
+我们可以只提供d的值来进行调用，如下所示：
+
+Bar (d:3);
+
+当调用COM API时，这会十分有用。
+
+**var－隐式输入的局部变量**
+
+经常有这样的情况，我们在一步中声明并初始化变量。如果编译器能够由初始化表达中推测类型，我们就可以使用关键字var来代替类型声明。例如：
+
+.. code:: csharp
+
+    var x = "hello";
+    var y = new System.Text.StringBuilder();
+    var z = (float)Math.PI;
+
+这与下面的代码等同：
+
+.. code:: csharp
+
+    string x = "hello";
+    System.Text.StringBuilder y = new System.Text.StringBuilder();
+    float z = (float)Math.PI;
+
+由于这种直接的等价性，隐式输入的变量是静态输入的。例如，下面的代码会产生编译时错误：
+
+.. code:: csharp
+
+    var x = 5;
+    x = "hello";    // Compile-time error; x is of type int
+
+表达式与操作符
+--------------
+
+表达式本质上代表一个值。最简单的表达式类型是常量和变量。表达式可以使用操作符进行转换与组合。操作符使用一个或是多个输入操作数来输出一个新表达式。下面是一个常量表达式的例子：
+
+12
+
+我们可以使用\*操作组合两个操作数（字面量表达式12与30），如下所示：
+
+12\*30
+
+之所以可以构建复杂的表达式是因为操作数本身也可能是一个表达式，例如下面示例中的操作(12\*30)：
+
+1 + (12 \* 30)
+
+依据操作数的数目，C#中的操作符可以分为一目，又目或是三目操作符。双目操作符总是使用中缀形式，其中操作符位于两个操作数之间。
+
+初级表达式
+~~~~~~~~~~
+
+初级表达式包括由语言基础所固有的操作符组成的表达式。如下面的例子：
+
+Math.Log (1)
+
+这个表达式由两个初级表达式组成。第一个表达式执行成员查找（.操作符），第二个表达式执行方法调用（使用()操作符）。
+
+空表达式
+~~~~~~~~
+
+空表达式是没有值的表达式。如下面的示例：
+
+Console.WriteLine (1)
+
+因为空表达式没有值，因而不能用作操作数来构建更为复杂表达式：
+
+1 + Console.WriteLine (1) // Compile-time error
+
+赋值表达式
+~~~~~~~~~~
+
+赋值表达式使用=操作将另一个表达式的结果赋值给一个变量。例如：
+
+x = x \* 5
+
+赋值表达并不是空表达式。他实际带有赋值的值，因而可以组合到其他表达式中。如下面的示例：
+
+y = 5 \* (x = 2)
+
+这种风格的表达式可以用来初始化多个值：
+
+a = b = c = d = 0
+
+复合赋值表达式是使用另一个操作符组合赋值的简化语义。例如：
+
+x \*= 2 // equivalent to x = x \* 2 x <<= 1 // equivalent to x = x << 1
+
+运算符优先级与结合性
+~~~~~~~~~~~~~~~~~~~~
+
+当一个表达式包含多个操作符时，优先级与结合性确定了计算的顺序。具有高优先级的操作符要先于具有低优先级的操作而执行。如果操作符具有相同的优先级，操作符的结合性决定了计算的顺序。
+
+**优先级**
+
+下面的表达式：
+
+1 + 2 \* 3
+
+会按如下方式进行计算，因为\*比+的优先级要高：
+
+1 + (2 \* 3)
+
+**左结合操作符**
+
+双目操作符（除了赋值，lambda，与null接合操作符）是左结合的；换句话说，他们会由左向右进行计算。例如，下面的表达式：
+
+8 / 4 / 2
+
+由于左结合性，会按如下方式进行计算：
+
+( 8 / 4 ) / 2 // 1
+
+我们可以插入括号来改变实际的计算顺序：
+
+8 / ( 4 / 2 ) // 4
+
+**右结合操作符**
+
+赋值操作符，lambda，null接合与条件操作符是右结合操作符；换句话说，他们会由右到左进行计。右结合性会使得如下的多赋值表达式通过编译：
+
+x = y = 3;
+
+首先将3赋值给y，然后将表达式的结果赋值给x。
+
+操作符表
+~~~~~~~~
+
+表2-3以优先级顺序列出了C#中的操作符。相同类别中的操作符具有相同的优先级。我们会在操作符重载中解释用户可重载的操作符。
+
+|csharp\_table\_2\_3\_1.png| |csharp\_table\_2\_3\_2.png|
+|csharp\_table\_2\_3\_3.png| |csharp\_table\_2\_3\_4.png|
+
+语句
+----
+
+函数由以出现在的顺序执行的语句组成。一个语句块是出现在花括号之间的语句系列。
+
+声明语句
+~~~~~~~~
+
+声明语句声明一个新的变量，可以选择使用表达式初始化变量。声明语句以分号结束。我们可以使用逗号分隔的列表声明多个相同类型的变量。例如：
+
+.. code:: csharp
+
+    string someWord = "rosebud";
+    int someNumber = 42;
+    bool rich = true, famous = false;
+
+常量的声明类型于变量声明，所不同的是常量在声明之后不能修改，并且初始化必须出现在声明中：
+
+.. code:: csharp
+
+    const double c = 2.99792458E08;
+    c += 10;                        // Compile-time Error
+
+**局部变量**
+
+局部变量与常量的作用域可以扩展到当前块。在当前块或是嵌套块中我们不能使用相同的名字声明另一个局部变量。例如：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      int x;
+      {
+        int y;
+        int x;            // Error - x already defined
+      }
+      {
+        int y;            // OK - y not in scope
+      }
+      Console.Write (y);  // Error - y is out of scope
+    }
+
+表达式语句
+~~~~~~~~~~
+
+表达式语句是表达式，同时也是一个正确的语句。表达式语句必须修改状态或是调用可以修改状态的某些内容。修改状态本质上意味着修改变量。可能的表达语句如下：
+
+-  赋值操作符（包括自增与自减表达式）
+-  方法调用表达式
+-  对象实例化表达式
+
+如下面的一些示例：
+
+.. code:: csharp
+
+    // Declare variables with declaration statements:
+    string s;
+    int x, y;
+    System.Text.StringBuilder sb;
+    // Expression statements
+    x = 1 + 2;                 // Assignment expression
+    x++;                       // Increment expression
+    y = Math.Max (x, 5);       // Assignment expression
+    Console.WriteLine (y);     // Method call expression
+    sb = new StringBuilder();  // Assignment expression
+    new StringBuilder();       // Object instantiation expression
+
+当我们调用一个构造函数或是返回值的方法时，我们并没有被强迫使用结果。然而，除非构造函数或是方法修改状态，否则语句是完全没用的：
+
+.. code:: csharp
+
+    new StringBuilder();     // Legal, but useless
+    new string ('c', 3);     // Legal, but useless
+    x.Equals (y);            // Legal, but useless
+
+选择语句
+~~~~~~~~
+
+C#具有下列机制来条件的控制程序的执行流程：
+
+-  选择语句（if，switch）
+-  条件操作符（?:）
+-  循环语句（while，do...while，for，foreach）
+
+本节讨论最简单的两种结构：if-else语句与switch语句。
+
+**if语句**
+
+if语句会依据bool表达式是否为真来执行代码体。例如：
+
+.. code:: csharp
+
+    if (5 < 2 * 3)
+    {
+      Console.WriteLine ("true");       // True
+    }
+
+如果代码体是一条语句，我们可以忽略花括号：
+
+.. code:: csharp
+
+    if (5 < 2 * 3)
+      Console.WriteLine ("true");       // True
+
+**else子句**
+
+if语句后可以跟else子句：
+
+.. code:: csharp
+
+    if (2 + 2 == 5)
+      Console.WriteLine ("Does not compute");
+    else
+      Console.WriteLine ("False");        // False
+
+在else子句中，我们可以嵌套其他的if语句：
+
+.. code:: csharp
+
+    if (2 + 2 == 5)
+      Console.WriteLine ("Does not compute");
+    else
+      if (2 + 2 == 4)
+        Console.WriteLine ("Computes");    // Computes
+
+**使用花括号改变执行流程**
+
+else子句总是与语句块中前一个if语句相匹配。例如：
+
+.. code:: csharp
+
+    if (true)
+      if (false)
+        Console.WriteLine();
+      else
+        Console.WriteLine ("executes");
+
+这在语义上与下面的代码相同：
+
+.. code:: csharp
+
+    if (true)
+    {
+      if (false)
+        Console.WriteLine();
+      else
+        Console.WriteLine ("executes");
+    }
+
+我们可以通过移动花括号来改变执行流程：
+
+.. code:: csharp
+
+    if (true)
+    {
+      if (false)
+        Console.WriteLine();
+    }
+    else
+      Console.WriteLine ("does not execute");
+
+通过花括号，我们可以显示表述我们的意图。这可以改善嵌套if语句的可读性－尽管编译器并没有要求这样做。一个值得注意的例外就是下面的模式：
+
+.. code:: csharp
+
+    static void TellMeWhatICanDo (int age)
+    {
+      if (age >= 35)
+        Console.WriteLine ("You can be president!");
+      else if (age >= 21)
+        Console.WriteLine ("You can drink!");
+      else if (age >= 18)
+        Console.WriteLine ("You can vote!");
+      else
+        Console.WriteLine ("You can wait!");
+    }
+
+在这里我们使用if与else语句来模拟其他语言中的"elsif"结构（C#的#elif预处理器指令）。Visual
+Studio的自动格式化会识别这种模式并且保持缩进。尽管在语义来说每一个后跟else语句的if语句在功能上都是嵌套在else语句之中。
+
+**switch语句**
+
+switch语句可以使得我们依据变量所具有的可能值的选择来分支程序执行。switch语句也许会比多个if语句生成更为清晰的代码，因为switch语句要求表达式只计算一次。例如：
+
+.. code:: csharp
+
+    static void ShowCard(int cardNumber)
+    {
+      switch (cardNumber)
+      {
+        case 13:
+          Console.WriteLine ("King");
+          break;
+        case 12:
+          Console.WriteLine ("Queen");
+          break;
+        case 11:
+          Console.WriteLine ("Jack");
+          break;
+        case ?1:                         // Joker is ?1
+          goto case 12;                  // In this game joker counts as queen
+        default:                         // Executes for any other cardNumber
+          Console.WriteLine (cardNumber);
+          break;
+      }
+    }
+
+我们只能在静态计算的类型表达式上执行分支，这就将类型限制为内建的整数类型，string类型与enum类型。
+
+在每一个case语句的结束处，我们可以使用某种类型的跳转语句表明接下来要执行到哪里。下面是一些选择：
+
+-  break（跳转到switch语句的结束处）
+-  goto case x（跳转到另一个case语句）
+-  goto default（跳转到default子句）
+-  其他的跳转语句－也就是return，throw，continue或是goto label
+
+当多个值需要执行相同的代码时，我们可以顺序列出case：
+
+.. code:: csharp
+
+    switch (cardNumber)
+    {
+      case 13:
+      case 12:
+      case 11:
+        Console.WriteLine ("Face card");
+        break;
+      default:
+        Console.WriteLine ("Plain card");
+        break;
+    }
+
+switch语句的这种特性是比多个if-else语句生成更清晰代码的关键。
+
+**循环语句**
+
+C#可以通过while，do-while，for与foreach语句重复执行语句序列。
+
+**while与do-while循环**
+
+当bool表达式为真时while循环会重复执行代码体。表达式会在循环体执行之前进行测试。例如：
+
+.. code:: csharp
+
+    int i = 0;
+    while (i < 3)
+    {
+      Console.WriteLine (i);
+      i++;
+    }
+
+输出结果为：
+
+.. code:: csharp
+
+    0
+    1
+    2
+
+do-while循环在功能上与while循环的唯一不同在于前者在语句块执行之后测试表达式（保证表达式总是至少执行一次）。在这里将前面的表达式使用do-while循环重写：
+
+.. code:: csharp
+
+    int i = 0;
+    do
+    {
+      Console.WriteLine (i);
+      i++;
+    }
+    while (i < 3);
+
+**for循环**
+
+for循环类似于while循环，但是具有初始以及循环变量的特殊子句。for循环包含如下的三个子句：
+
+.. code:: csharp
+
+    for (initialization-clause; condition-clause; iteration-clause)
+      statement-or-statement-block
+
+初始化子句：在循环开始之前执行；用来初始化一个或是多个循环变量。
+
+条件子句：bool表达式，当为真时，执行循环体。
+
+循环子句：在语句块的每一次循环之后执行；通常用于更新循环变量。
+
+例如下面的代码将会输出0到2：
+
+.. code:: csharp
+
+    for (int i = 0; i < 3; i++)
+      Console.WriteLine (i);
+
+下面的代码会输出前10个Fibonacci数字：
+
+.. code:: csharp
+
+    for (int i = 0, prevFib = 1, curFib = 1; i < 10; i++)
+    {
+      Console.WriteLine (prevFib);
+      int newFib = prevFib + curFib;
+      prevFib = curFib; curFib = newFib;
+    }
+
+for语句三个部分中的任何一个都可以被忽略。我们可以使用下面的代码实现无限循环：
+
+.. code:: csharp
+
+    for (;;)
+      Console.WriteLine ("interrupt me");
+
+**foreach循环**
+
+foreach在可枚举的对象中的每一个元素上迭代。C#与.NET框架中的大多数类型表示可枚举的元素集合或列表。例如，数级与字符串都可以枚举。下面是一个字符串中的字符上枚举的例子：
+
+.. code:: csharp
+
+    foreach (char c in "beer")   // c is the iteration variable
+      Console.WriteLine (c);
+
+输出结果如下：
+
+.. code:: csharp
+
+    b
+    e
+    e
+    r
+
+我们会在第4章定义可枚举的对象。
+
+跳转语句
+~~~~~~~~
+
+C#的跳转语句是break，continue，goto，return与throw。
+
+**break语句**
+
+break语句结束循环或是switch语句代码体的执行：
+
+.. code:: csharp
+
+    int x = 0;
+    while (true)
+    {
+      if (x++ > 5)
+        break ;      // break from the loop
+    }
+    // execution continues here after break
+    ...
+
+**continue语句**
+
+continue语句会放弃循环中余下代码的执行并且开始下一次循环。下面的循环略过了偶数：
+
+.. code:: csharp
+
+    for (int i = 0; i < 10; i++)
+    {
+      if ((i % 2) == 0)       // If i is even,
+        continue;             // continue with next iteration
+      Console.Write (i + " ");
+    }
+
+输出结果为： 1 3 5 7 9
+
+**goto语句**
+
+goto语句将执行转移到代码块中的另一个标签。格式如下：
+
+goto statement-label;
+
+或者当使用switch语句时格式如下：
+
+goto case case-constant;
+
+标签语句只是代码块中的一个占位符，以一个冒号后缀表示。下面的代码由1循环到5，模仿for循环：
+
+.. code:: csharp
+
+    int i = 1;
+    startLoop:
+    if (i <= 5)
+    {
+      Console.Write (i + " ");
+      i++;
+      goto startLoop;
+    }
+
+输出结果为： 1 2 3 4 5
+
+goto case-constant语句将执行转到switch块中另一个case。
+
+**return语句**
+
+return语句退出方法并且如果方法非空时必须返回一个方法返回类型的表达式：
+
+.. code:: csharp
+
+    static decimal AsPercentage (decimal d)
+    {
+      decimal p = d * 100m;
+      return p;             // Return to the calling method with value
+    }
+
+return语句可以出现在方法中的任意位置。
+
+**throw语句**
+
+throw语句抛出一个异常表明发生了错误。
+
+.. code:: csharp
+
+    if (w == null)
+      throw new ArgumentNullException (...);
+
+其他语句
+~~~~~~~~
+
+lock语句是用于调用Monitor类的Enter与Exit方法的语法简写。
+
+using语句提供了一种优雅的语法在finally块中在实现了IDisposable的对象上调用Dispose。
+
+名字空间
+--------
+
+名字空间是一个域，其中的类型名字必须是唯一的。类型通常组织在层次名字空间中－同时为了避免名字冲突以及使得类型名字易于查找。例如，处理公钥的RAS类型使用下面的名字空间进行定义：
+
+System.Security.Cryptography
+
+名字空间构成了类型名字的一部分。下面代码调用RAS的Create方法：
+
+.. code:: csharp
+
+    System.Security.Cryptography.RSA rsa =
+      System.Security.Cryptography.RSA.Create();
+
+namespace关键字为块中的类型定义了一个名字空间。例如：
+
+.. code:: csharp
+
+    namespace Outer.Middle.Inner
+    {
+      class Class1 {}
+      class Class2 {}
+    }
+
+名字空间中的句点表明了嵌套名字空间的层次。下面的代码在语义上与前面的示例完全相同：
+
+.. code:: csharp
+
+    namespace Outer
+    {
+      namespace Middle
+      {
+        namespace Inner
+        {
+          class Class1 {}
+          class Class2 {}
+        }
+      }
+    }
+
+我们可以其完全修饰名来引用类型，其中包含由最外层到最内层全部的名字空间。例如，我们用
+Outer.Middle.Inner.Class1来引用前面示例中的Class1。
+
+没有定义在任何名字空间中的类型位于全局名字空间中。全局名字空间也包含最顶层的名字空间，例如我们示例中的Outer。
+
+using指令
+~~~~~~~~~
+
+using指令引入一个名字空间。这是一种方便的方法，可以不需要完全的修饰名来引用类型。下面的示例在语义上与我们前面的示例相同：
+
+.. code:: csharp
+
+    using Outer.Middle.Inner;
+    class Test
+    {
+      static void Main()
+      {
+        Class1 c;
+      }
+    }
+
+名字空间中的规则
+~~~~~~~~~~~~~~~~
+
+**名字作用域**
+
+在外层名字空间中声明的名字可以无限的在内层名字空间中使用。在下面的代码中，名字Middle与Class1被隐式引入到Inner中：
+
+.. code:: csharp
+
+    namespace Outer
+    {
+      namespace Middle
+      {
+        class Class1 {}
+        namespace Inner
+        {
+          class Class2 : Class1  {}
+        }
+      }
+    }
+
+如果我们希望引用位于我们名字空间层次结构不同分支中的类型时，我们可以使用部分修饰名。在下面的示例中，我们将SalesReport构建在Common.ReportBase基础之上：
+
+.. code:: csharp
+
+    namespace MyTradingCompany
+    {
+      namespace Common
+      {
+        class ReportBase {}
+      }
+      namespace ManagementReporting
+      {
+        class SalesReport : Common.ReportBase  {}
+      }
+    }
+
+**名字隐藏**
+
+如果相同的名字同时出现在内层与外层名字空间中时，内层名字就会获得胜利。要引用外层名字空间中的类型，我们必须修饰其名字：
+
+.. code:: csharp
+
+    namespace Outer
+    {
+      class Foo { }
+      namespace Inner
+      {
+        class Foo { }
+        class Test
+        {
+          Foo f1;         // = Outer.Inner.Foo
+          Outer.Foo f2;   // = Outer.Foo
+        }
+      }
+    }
+
+**重复的名字空间**
+
+我们可以重复名字空间的声明，只要名字空间中的类型名字不冲突即可：
+
+.. code:: csharp
+
+    namespace Outer.Middle.Inner
+    {
+      class Class1 {}
+    }
+    namespace Outer.Middle.Inner
+    {
+      class Class2 {}
+    }
+
+我们还可以将上面的示例分为两个源，从而我们可以每一个类编译进入不同的程序集中。
+
+源文件1：
+
+.. code:: csharp
+
+    namespace Outer.Middle.Inner
+    {
+      class Class1 {}
+    }
+
+源文件2：
+
+.. code:: csharp
+
+    namespace Outer.Middle.Inner
+    {
+      class Class2 {}
+    }
+
+**嵌入using指令**
+
+我们可以名字空间中嵌入using指令。这就允许我们将using指令的作用域局限在名字空间声明中。在下面的示例中，Class1在一个名字空间中可见，但是在另一个名字空间中不可见：
+
+.. code:: csharp
+
+    namespace N1
+    {
+      class Class1 {}
+    }
+    namespace N2
+    {
+      using N1;
+      class Class2 : Class1 {}
+    }
+    namespace N2
+    {
+      class Class3 : Class1 {}   // Compile-time error
+    }
+
+类型与名字空间的别名
+~~~~~~~~~~~~~~~~~~~~
+
+引入名字空间也许会导致类型名称冲突。我们可以仅引入我们所需要的特定类型，为每个类型指定一个别名，而不引全部的名字空间。例如：
+
+.. code:: csharp
+
+    using PropertyInfo2 = System.Reflection.PropertyInfo;
+    class Program { PropertyInfo2 p; }
+
+完整的名字空间也可以有别名，例如：
+
+.. code:: csharp
+
+    using R = System.Reflection;
+    class Program { R.PropertyInfo p; }
+
+高级名字空间特性
+~~~~~~~~~~~~~~~~
+
+**Extern**
+
+extern别名可以使得我们的程序引用在相同的完全修饰名中的两个类型（例如，名字空间与类型名完全相同）。这种应用场景并不常见，只有当两个类型来自不同的程序集中时才会出现这种情况。考虑下面的示例：
+
+库1：
+
+.. code:: csharp
+
+    // csc target:library /out:Widgets1.dll widgetsv1.cs
+    namespace Widgets
+    {
+      public class Widget {}
+    }
+
+库2：
+
+.. code:: csharp
+
+    // csc target:library /out:Widgets2.dll widgetsv2.cs
+    namespace Widgets
+    {
+      public class Widget {}
+    }
+
+程序：
+
+.. code:: csharp
+
+    // csc /r:Widgets1.dll /r:Widgets2.dll application.cs
+    using Widgets;
+     
+    class Test
+    {
+      static void Main()
+    // csc /r:Widgets1.dll /r:Widgets2.dll application.cs
+    using Widgets;
+     
+      {
+        Widget w = new Widget();
+      }
+    }
+
+这段程序并不能通过编译，因为Widget是不明确的。extern别名可以解决我们程序中的这种不明确性：
+
+.. code:: csharp
+
+    // csc /r:W1=Widgets1.dll /r:W2=Widgets2.dll application.cs
+    extern alias W1;
+    extern alias W2;
+    class Test
+    {
+      static void Main()
+      {
+        W1.Widgets.Widget w1 = new W1.Widgets.Widget();
+        W2.Widgets.Widget w2 = new W2.Widgets.Widget();
+      }
+    }
+
+**名字空间别名修饰符**
+
+正如我们前面所提到的，内层名字空间中的名字会隐藏外层名字空间中的名字。然而，有时甚至是完全修饰的类型名字也不能解决这种冲突。考虑下面的示例：
+
+.. code:: csharp
+
+    namespace N
+    {
+      class A
+      {
+        public class B {}                    // Nested type
+        static void Main() { new A.B(); }    // Instantiate class B
+      }
+    }
+    namespace A
+    {
+      class B {}
+    }
+
+Main方法可以实例化嵌入类B，也可能是名字空间A中的类B。编译器总是为当前名字空间中的标识符指定更高的优先级；所以在这种情况下，实例化嵌入类B。
+
+为了解决这样的冲突，名字空间可以相对于下面的情况进行修饰：
+
+-  全局名字空间－所有名字空间的根（使用环境关键字global关键字进行标识）
+-  extern别名集合
+
+        标记可以用于名字空间的别名修饰。在这个示例中，我们使用全局名字空间来修饰：
+
+.. code:: csharp
+
+    namespace N
+    {
+      class A
+      {
+        static void Main()
+        {
+          System.Console.WriteLine (new A.B());
+          System.Console.WriteLine (new global::A.B());
+        }
+        public class B {}
+      }
+    }
+    namespace A
+    {
+      class B {}
+    }
+
+下面的代码是一个使用别名修饰的例子：
+
+.. code:: csharp
+
+    extern alias W1;
+    extern alias W2;
+    class Test
+    {
+      static void Main()
+      {
+        W1::Widgets.Widget w1 = new W1::Widgets.Widget();
+        W2::Widgets.Widget w2 = new W2::Widgets.Widget();
+      }
+    }
+

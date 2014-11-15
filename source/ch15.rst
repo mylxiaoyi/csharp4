@@ -1,0 +1,92 @@
+Chapter 15. Networking
+======================
+
+框架在System.Net.\*名字空间中提供了大量的类用于通过标准网络协议进行通信，例如HTTP，TCP/IP与FTP。下面是一些关键组件的总结：
+
+-  WebClient类用于通过HTTP或是FTP实现简单的上传下载操作。
+-  WebRequest与WebResponse类用于在HTTP或是FTP操作宫廷户端提供更多的控制。
+-  HttpListener用于编写HTTP服务器。
+-  SmtpClient用于构建并通过SMTP发送邮件消息。
+-  Dns用于在域名与地址之间进行转换。
+-  TcpClient，UdpClient，TcpListener与Socket类用于对传输层与网络层的直接访问。
+
+框架主要支持基于网络的协议，尽管并没有将功能仅限制在网络；如TCP/IP协议同时统治着局域网领域。
+
+本节中所描述的类型大部分位于System.Net与System.Net.Socket名字空间中；然而，许多示例同时使用System.IO中的类型。
+
+网络体系结构
+------------
+
+图15-1显示了.NET网络类型及其所在的通信层。大部分网络类型位于传输层或是应用层。传输层为发送与接收字节（TCP与UDP）定义了基本协议；应用层为特定了应用定义了高层协议，例如接收web页面（HTTP），传输文件（FTP），发送邮件（SMTP），以及在域名以及IP地址之间进行转换（DNS）。
+
+.. figure:: csharp_15_1.png
+   :alt: csharp_15_1.png
+
+   csharp\_15\_1.png
+通常在应用层编程最为方便；然而，由于某些原因我们也许希望直接在传输层进行工作。如果我们需要一个在框架中并没有提供的应用协议就是其中一个原因，例如用于接收邮件的POP3。另一个原因也许是我们希望为特定的应用发明自定义的协议，例如P2P客户端。
+
+在所有的应用协议中，HTTP是一个特殊的协议，因为其应用已经扩展到通用目的通信。其基本操作模式－“为我提供这个URL的web页面”－已经非常适合“为我提供使用这些参数调用该方法的返回值”。HTTP具有一个在多层业务应用以及面向服务的体系结构中非常有用的特性集合，例如用于验证与加密的协议，消息分块，扩展头与Cookie，以及具有共享一个端口与IP地址的多个服务器程序的能力等。正是由于这些原因，HTTP在框架中得到很好的支持，正如本章所描述的，通过WCF，Web
+Services以及ASP.NET在较高层次上进行双向支持。
+
+框架对用于发送与接收文件的FTP协议提供了客户端支持。服务器端支持以IIS或是基于Unix的服务器软件进行提供。
+
+正如前面的讨论所清楚表明的，网络是一个很有挑战的领域。表格15-1列出了网络TLA（三字母缩写）。
+
+.. figure:: csharp_table_15_1.png
+   :alt: csharp_table_15_1.png
+
+   csharp\_table\_15\_1.png
+地址与端口
+----------
+
+为了使得通信能够工作，计算机或是设备需要一个地址。网络使用两种地址系统：
+
+IPv4
+
+当前占统治地位的地址系统；IPv4地址是32位宽。当格式化为字符串时，IPv4地址被书写为四个点分隔的十进制数（例如：101.102.103.104）。地址可以在世界中是唯一的，或者是在特定的子网中是唯一的。
+
+IPv6
+
+更新的128位地址系统。地址以冒号分隔的16进制形式格式化为字符串。.NET框架要求我们为地址添加一个方括号。
+
+System.Net名字空间中的IPAddress类表示任意协议中的地址。他有一个接受字节数组的构造函数，以及一个接受已正确格式化的字符串的静态Parse方法：
+
+.. code:: csharp
+
+    IPAddress a1 = new IPAddress (new byte[] { 101, 102, 103, 104 });
+    IPAddress a2 = IPAddress.Parse ("101.102.103.104");
+    Console.WriteLine (a1.Equals (a2));                     // True
+    Console.WriteLine (a1.AddressFamily);                   // InterNetwork
+    IPAddress a3 = IPAddress.Parse
+      ("[3EA0:FFFF:198A:E4A3:4FF2:54fA:41BC:8D31]");
+    Console.WriteLine (a3.AddressFamily);   // InterNetworkV6
+
+TCP与UDP协议将每一个IP地址分散到65535个端口上，从而允许一个计算机在一个地址上运行多个应用，每一个应用有其自己的端口。许多应用具有标准的端口约定；例如，HTTP使用端口80；SMTP使用端口25。
+
+IP地址与端口组合在.NET框架中是通过IPEndPoint类来表示的：
+
+.. code:: csharp
+
+    IPAddress a = IPAddress.Parse ("101.102.103.104");
+    IPEndPoint ep = new IPEndPoint (a, 222);           // Port 222
+    Console.WriteLine (ep.ToString());                 // 101.102.103.104:222
+
+URIs
+----
+
+URI是一个描述位于Internet或是LAN上资源的特殊格式化字符串，例如web页面，或是Email地址。URI的确切格式是由Internet
+Engineering Task Force来定义的。
+
+一个URI可以分解为多个元素序列－通常分为scheme，authority与path。System名字空间的中的Uri类执行这种分解任务，并获取每个元素的属性。如图15-2所示。
+
+.. figure:: csharp_15_2.png
+   :alt: csharp_15_2.png
+
+   csharp\_15\_2.png
+我们可以通过将下列参数中的一个传递给其构造函数来生成一个Uri对象：
+
+-  URI字符串，例如http://www.ebay.com
+   或是file://janespc/sharedpics/dolphin.jpg
+-  到我们硬盘文件的绝对路径，例如：c:\\myfiles\\data.xmls
+-  LAN上的UNC路径，例如\\\\janespc\\sharedpics\\dolphin.jpg
+

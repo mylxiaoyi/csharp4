@@ -1,0 +1,415 @@
+Chapter 11. Other XML Technologies
+==================================
+
+System.Xml名字空间由下面的名字空间以及核心类组成：
+
+System.Xml.\*
+
+-  XmlReader与XmlWriter：用于读取或是写入XML流的高性能、前向光标
+-  XmlDocument:以W3C风格DOM表示的XML文档
+
+System.Xml.XPath：用于XPath的基础结构与API(XPathNavigator)，一种用于查询XML的基于字符串的语言
+
+System.Xml.XmlSchema：用于（W3C）XSD Scheme的基础结构与API
+
+System.Xml.Xsl：用于执行XML的XSLT转换的基础结构与API(XslCompiledTransform)
+
+System.Xml.Serialization：支持向或是由XML类的序列化
+
+System.Xml.XLinq：现代、简化的XmlDocument的LINQ版本
+
+W3C是World Wide Web Consortium的缩写，在其中定义了XML标准。
+
+用于分析或是格式化XML字符串的XmlConvert静态类在第6章中进行了讨论。
+
+XmlReader
+---------
+
+XmlReader是一个以底层前向方式读取XML流的高性能类。
+
+考虑下面的XML文件：
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="utf-8" standalone="yes"?>
+    <customer id="123" status="archived">
+      <firstname>Jim</firstname>
+      <lastname>Bo</lastname>
+    </customer>
+
+要实例化XmlReader，我们调用静态的XmlReader.Create方法，并向其中传递一个Stream，一个TextReader或是一个URI字符串。例如：
+
+using (XmlReader reader = XmlReader.Create ("customer.xml"))
+
+``?...``
+
+要创建一个由字符串进行读取的XmlReader：
+
+.. code:: csharp
+
+    XmlReader reader = XmlReader.Create (
+      new System.IO.StringReader (myString));
+
+我们也可以传递一个XmlReaderSettings对象来控制分析与验证选项。XmlReaderSettings上的下列三个选项对于略过多余的内容特别有用：
+
+.. code:: csharp
+
+    bool IgnoreComments                  // Skip over comment nodes?
+    bool IgnoreProcessingInstructions    // Skip over processing instructions?
+    bool IgnoreWhitespace                // Skip over whitespace?
+
+在下面的示例中，我们指示读取器不要读取空白，在通常的应用场景中这通常是令人分心的事情：
+
+.. code:: csharp
+
+    XmlReaderSettings settings = new XmlReaderSettings();
+    settings.IgnoreWhitespace = true;
+    using (XmlReader reader = XmlReader.Create ("customer.xml", settings))
+      ...
+
+XmlReaderSettings中另一个比较有用的属性是ConformanceLevel。Document的默认值指示读取器假定正确的XML文档只有一个根节点。如果我们只是希望读取XML中包含多个节点的其中一部分则会出现问题：
+
+.. code:: xml
+
+    <firstname>Jim</firstname>
+    <lastname>Bo</lastname>
+
+要读取这段内容而不抛出异常，我们必须将ConformanceLevel设置为Fragment。
+
+XmlReaderSettings同时有一个名为CloseInput的属性，该属性用来指示当读取器关闭时是否关闭底层流（在XmlWriterSettings上有一个类似的CloseOutput）。CloseInput与CloseOutput的默认值为true。
+
+读取节点
+~~~~~~~~
+
+XML流的组成单位是XML节点。读取器以文本顺序（尝试优先）遍历流。读取器的Depth属性返回光标的当前深度。
+
+由XmlReader读取的最基本方法就是调用Read。他会前进到XML流中的下一个节点，非常类似于IEnumerator中的MoveNext。Read方法的第一次调用会将光标指向第一个节点。当Read返回false时，则意味着光标已经经过最后一个节点，此时XmlReader应该被关闭。
+
+在这个示例中，我们读取XML流中的每一个节点，同时输出每一个节点类型：
+
+.. code:: csharp
+
+    XmlReaderSettings settings = new XmlReaderSettings();
+    settings.IgnoreWhitespace = true;
+    using (XmlReader reader = XmlReader.Create ("customer.xml", settings))
+      while (reader.Read())
+      {
+        Console.Write (new string (' ',reader.Depth*2));  // Write indentation
+        Console.WriteLine (reader.NodeType);
+      }
+
+输出结果如下：
+
+.. code:: csharp
+
+    XmlDeclaration
+    Element
+      Element
+        Text
+      EndElement
+      Element
+        Text
+      EndElement
+    EndElement
+
+NodeType是XmlNodeType类型，他是下列成员的一个枚举：
+
+.. code:: csharp
+
+    None    Comment    Document
+    XmlDeclaration    Entity    DocumentType
+    Element    EndEntity    DocumentFragment
+    EndElement    EntityReference    Notation
+    Text    ProcessingInstruction    Whitespace
+    Attribute    CDATA    SignificantWhitespace
+
+XmlReader上的两个string属性提供了对节点内容的访问：Name与Value。依据节点类型，或者Name，或者Value（或同时）会被填充：
+
+.. code:: csharp
+
+    XmlReaderSettings settings = new XmlReaderSettings();
+    settings.IgnoreWhitespace = true;
+    settings.ProhibitDtd = false;      // Must set this to read DTDs
+    using (XmlReader r = XmlReader.Create ("customer.xml", settings))
+      while (r.Read())
+      {
+        Console.Write (r.NodeType.ToString().PadRight (17, '-'));
+        Console.Write ("> ".PadRight (r.Depth * 3));
+        switch (r.NodeType)
+        {
+          case XmlNodeType.Element:
+          case XmlNodeType.EndElement:
+            Console.WriteLine (r.Name); break;
+          case XmlNodeType.Text:
+          case XmlNodeType.CDATA:
+          case XmlNodeType.Comment:
+          case XmlNodeType.XmlDeclaration:
+            Console.WriteLine (r.Value); break;
+          case XmlNodeType.DocumentType:
+            Console.WriteLine (r.Name + " - " + r.Value); break;
+          default: break;
+        }
+      }
+
+为了演示，我们扩展我们的XML文件来包含一个文档类型，实体，CDATA以及注释：
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="utf-8" ?>
+    <!DOCTYPE customer [ <!ENTITY tc "Top Customer"> ]>
+    <customer id="123" status="archived">
+      <firstname>Jim</firstname>
+      <lastname>Bo</lastname>
+      <quote><![CDATA[C#'s operators include: < > &]]></quote>
+      <notes>Jim Bo is a &tc;</notes>
+      <!--  That wasn't so bad! -->
+    </customer>
+
+实体类似于宏；CDATA类似于C#中的原始字符串（@"..."）。下面是输出结果：
+
+.. code:: xml
+
+    XmlDeclaration---> version="1.0" encoding="utf-8"
+    DocumentType-----> customer -  <!ENTITY tc "Top Customer">
+    Element----------> customer
+    Element---------->  firstname
+    Text------------->     Jim
+    EndElement------->  firstname
+    Element---------->  lastname
+    Text------------->     Bo
+    EndElement------->  lastname
+    Element---------->  quote
+    CDATA------------>     C#'s operators include: < > &
+    EndElement------->  quote
+    Element---------->  notes
+    Text------------->     Jim Bo is a Top Customer
+    EndElement------->  notes
+    Comment---------->    That wasn't so bad!
+    EndElement------->  customer
+
+XmlReader会自动解析实体，所以在我们的示例中，实体引用&tc;扩展为Top
+Customer。
+
+读取元素
+~~~~~~~~
+
+通常，我们已经知道我们正在读取的XML文档的结构。有鉴于此，XmlReader提供了一系列的假定特定结构的读取方法。这简化了我们的代码，同时可以执行某些验证。
+
+ReadStartElement验证当前的NodeType为StartElement，然后调用Read。如果我们指定一个名字，他会验证其与当前元素相匹配。
+
+ReadEndElement验证当前的NodeType为EndElement，然后调用Read。
+
+例如要读取下面的XML文档：
+
+.. code:: xml
+
+    <firstname>Jim</firstname>
+
+我们可以使用下面的代码：
+
+.. code:: csharp
+
+    reader.ReadStartElement ("firstname");
+    Console.WriteLine (reader.Value);
+    reader.ReadEndElement();
+
+ReadElementContentAsString方法一次完成所有的工作。他会读取一个开始元素，一个文本节点以及一个结束元素，并将内容作为字符串返回：
+
+string firstName = reader.ReadElementContentAsString ("firstname", "");
+
+第二个参数涉及名字空间，在这个示例中为空。同时这个方法还有其他的版本类型，例如ReadElementContentAsInt，该方法会分析结果。回到我们原始的XML文档：
+
+| ``?``\ \ ``Jim``\ 
+| ``?``\ \ ``Bo``\ 
+| ``?``\ \ ``500.00``\ \ ``????``
+
+我们可以使用下面的代码进行读取：
+
+.. code:: csharp
+
+    XmlReaderSettings settings = new XmlReaderSettings();
+    settings.IgnoreWhitespace = true;
+    using (XmlReader r = XmlReader.Create ("customer.xml", settings))
+    {
+      r.MoveToContent();                // Skip over the XML declaration
+      r.ReadStartElement ("customer");
+      string firstName    = r.ReadElementContentAsString ("firstname", "");
+      string lastName     = r.ReadElementContentAsString ("lastname", "");
+      decimal creditLimit = r.ReadElementContentAsDecimal ("creditlimit", "");
+      r.MoveToContent();      // Skip over that pesky comment
+      r.ReadEndElement();     // Read the closing customer tag
+    }
+
+**可选元素**
+
+在前面的示例中，假定是可选的。其解决方案非常直接：
+
+.. code:: csharp
+
+    r.ReadStartElement ("customer");
+    string firstName    = r. ReadElementContentAsString ("firstname", "");
+    string lastName     = r.Name == "lastname"
+                          ? r.ReadElementContentAsString() : null;
+    decimal creditLimit = r.ReadElementContentAsDecimal ("creditlimit", "");
+
+**随机元素顺序**
+
+本节中的示例依赖XML文件中的元素以确定顺序出现。如果我们需要处理任意顺序的元素，最简单的解决方案就是将XML部分读取到一个X-DOM中。我们会在稍后探讨如何实现。
+
+**空元素**
+
+XmlReader处理空元素的方式存在一个可怕的陷阱。考虑下面的元素：
+
+在XML中，这与下面的写法相同：
+
+然而，XmlReader会对其区别对待。在前一种情况下，下面的代码会按照预期的样子工作：
+
+.. code:: csharp
+
+    reader.ReadStartElement ("customerList");
+    reader.ReadEndElement();
+
+在第二种情况下，ReadEndElement会抛出异常，因为并没有XmlReader所关注的单独的结束元素。解决方法就是检测空元素，如下所示：
+
+.. code:: csharp
+
+    bool isEmpty = reader.IsEmptyElement;
+    reader.ReadStartElement ("customerList");
+    if (!isEmpty) reader.ReadEndElement();
+
+实际上，这只会出现在当元素也许会包含子元素时的情况。对于包含简单的文本的元素，我们可以通过调用如ReadElementContentAsString这样的方法来避免这些问题。ReadElementXXX方法会正确处理两种空元素类型。
+
+**其他的ReadXXX方法**
+
+表11-1总结了XmlReader中的所有ReadXXX方法。这些方法中的大多数被设计用来处理元素。以粗体显示的示例XML片段是由所描述的方法来读取的。
+
+.. figure:: csharp_table_11.png
+   :alt: csharp_table_11.png
+
+   csharp\_table\_11.png
+ReadContentAsXXX方法将文本分析为XXX类型。在内部，XmlConver类执行字符串到类型的转换。文本节点可以位于元素或是一个属性中。
+
+ReadElementContentAsXXX方法是相应的ReadContentAsXXX方法的封装器。这些方法应用在元素节点上，而不是元素所包含的文本节点上。
+
+ReadInnerXml通常应用到元素，读取并返回元素及其子节点。当应到属性上时，他会返回属性的值。
+
+ReadOuterXml类似于ReadInnerXml，所不同的是，他会包含而不是排除光标位置处的元素。
+
+ReadSubtree返回一个提供当前元素（及其子元素）视图的代理读取器。在原始的读取器可以被安全的读取之前，代理读取器必须被关闭。当代理读取器被关闭时，原始读取器的光标位置会移动到子树的结束处。
+
+ReadToDescendent将光标移动到具有指定名字/名字空间的第一个子节点的起始处。
+
+ReadToFollwing将光标移动到具有指定名字/名字空间的第一个节点的起始处－无论深度。
+
+ReadToNextSibling将光标移动到具有指定名字/名字空间的第一个兄弟节点的起始处。
+
+ReadString与ReadElementString的行为类似于ReadContentAsString与ReadElementContentAsString，所不同的是，如果在元素内有多个文本节点时前者会抛出异常。通常，应避免使用这些方法，因为如果一个元素包含有注释时这些方法会抛出异常。
+
+读取属性
+~~~~~~~~
+
+XmlReader为我们提供了通过名字或是位置直接访问元素属性的索引器。使用索引器与调用GetAttribute方法等同。
+
+给定下面的XML片段：
+
+我们可以使用下面的代码读取其属性：
+
+.. code:: csharp
+
+    Console.WriteLine (reader ["id"]);              // 123
+    Console.WriteLine (reader ["status"]);          // archived
+    Console.WriteLine (reader ["bogus"] == null);   // True
+
+尽管属性顺序在语义是无关的，我们可以通过其顺序位置来访问属性。我们可以使用下面的代码来重写前面的示例：
+
+.. code:: csharp
+
+    Console.WriteLine (reader [0]);            // 123
+    Console.WriteLine (reader [1]);            // archived
+
+索引器也可以允许我们指定属性的名字空间－如果有。
+
+AttributeCount返回当前节点的属性数目。
+
+**属性节点**
+
+要显式的遍历属性节点，我们必须由仅是调用Read的普通路径进行转换。这样做的一个原因就在于如果我们要将属性值分析为其他类型，使用ReadContentAsXXX方法。
+
+转换必须由起始元素开始。要使得处理更容易，前向规则在属性遍历中得到舒缓：我们可以通过调用MoveToAttribute跳到任意的属性处。
+
+回到我们前面的示例：
+
+我们可以使用下面的代码进行操作：
+
+.. code:: csharp
+
+    reader.MoveToAttribute ("status");
+    string status = ReadContentAsString();
+    reader.MoveToAttribute ("id");
+    int id = ReadContentAsInt();
+
+如果指定的属性不存在，MoveToAttribute会返回false。
+
+我们也可以通过调用MoveToFirstAttribute然后调用MoveToNextAttribute方法顺序遍历所有属性：
+
+.. code:: csharp
+
+    if (reader.MoveToFirstAttribute())
+      do
+      {
+        Console.WriteLine (reader.Name + "=" + reader.Value);
+      }
+      while (reader.MoveToNextAttribute());
+    // OUTPUT:
+    id=123
+    status=archived
+
+名字空间与前缀
+~~~~~~~~~~~~~~
+
+XmlReader为引用元素与属性名字提供了两个并行系统：
+
+-  Name
+-  NamespaceURI与LocalName
+
+当我们读取元素的Name属性或是调用接受单个name参数的方法时，我们正在使用第一个系统。如果没有名字空间或是前缀时，这会工作得很好；否则就变成了一种较笨的方式。名字空间会被忽略，而前缀会按其所书写的样子被包含进来。例如：
+
+.. code:: text
+
+    Sample fragment             Name
+    <customer ...>              customer
+    <customer xmlns='blah' ...> customer
+    <x:customer ...>            x:customer
+
+下面的代码处理前两种情况：
+
+reader.ReadStartElement ("customer");
+
+要处理第三种情况则需要下面的代码：
+
+reader.ReadStartElement ("x:customer");
+
+第二个系统通过两个名字空间相关的属性进行工作：NamespaceURI与LocalName。这些属性考虑了前缀以及父元素所定义的默认名字空间。前缀被自动扩展。这意味着Namespace总是为当前的元素反映语义上正确的名字空间，而LocalName总是与前缀无关。
+
+当我们向如ReadStartElement这样的方法传递两个命名参数时，则我们在使用相同的系统。例如，考虑下面的XML：
+
+.. code:: csharp
+
+    <customer xmlns="DefaultNamespace" xmlns:other="OtherNamespace">
+      <address>
+        <other:city>
+        ...
+
+我们可以使用下面的代码进行读取：
+
+.. code:: csharp
+
+    reader.ReadStartElement ("customer", "DefaultNamespace");
+    reader.ReadStartElement ("address",  "DefaultNamespace");
+    reader.ReadStartElement ("city",     "OtherNamespace");
+
+如果需要，我们可以通过Prefix属性来查看我们所使用的前缀并通过调用LookupNamespace将其转换为名字空间。
+
+XmlWriter
+---------
+

@@ -1,0 +1,899 @@
+Chapter 16. Serialization
+=========================
+
+本章介绍序列化与反序列化，一种对象可以表示为普通文件或是二进制格式的机制。除非特别说明，本章中的类型全部位于下列名字空间中：
+
+-  System.Runtime.Serialization
+-  System.Xml.Serialization
+
+序列化概念
+----------
+
+序列化是将内存中的对象或是对象图（彼此引用的对象集合）填充到二进制流或是XML节点中，从而可以被存储或是传输。反序列化执行相反的操作，将一个数据流重新构建为一个内存对象或是对象图。
+
+序列化与反序列化通常用于：
+
+-  跨越网络或是程序边界传输对象
+-  在文件或是数据库中存储对象表示
+
+另一种很少使用的用法是进行深拷贝对象。数据约定与XML序列化引擎也可以用作载入或是保存已知结构的XML文件的通用工具。
+
+.NET框架同时由希望序列化与反序列化的客户端角度以及希望在类型如何进行序列化上进行控制的角度支持序列化与反序列化。
+
+序列化引擎
+~~~~~~~~~~
+
+在.NET框架中有四种序列化机制：
+
+-  数据约定序列化器
+-  二进制序列化器
+-  （基于属性）XML序列化器（XmlSerializer）
+-  IXmlSerializable接口
+
+在这些序列化机制中，前三个是为我们完成大部分序列化工作的序列化引擎。最后一个我们使用XmlReader与XmlWriter自己进行序列化工作。IXmlSerializable可以与数据约定序列化器或是XmlSerializer配合使用来处理更为复杂的XML序列化任务。
+
+表16-1比较了每一种序列化引擎。
+
+.. figure:: csharp_table_16_1.png
+   :alt: csharp_table_16_1.png
+
+   csharp\_table\_16\_1.png
+IXmlSerializable假定我们已使用XmlReader与XmlWriter进行编码。XML序列化引擎要求我们重用相同的XmlSerializer对象以实现良好的性能。
+
+**为什么存在三个引擎？**
+
+存在三个引擎部分由于历史原因造成的。框架开始时要序列化上实现两个不同的目标：
+
+-  序列化带有类型与引用的.NET对象图
+-  交互操作XML与SOAP消息标准
+
+第一个目标是由远程需求所导致的；第二个则是由Web
+Services所导致的。编写一个序列化引擎来处理两种任务的工作是非常繁琐的，所以Microsoft编写了两个引擎：二进制序列化器与XML序列化器。
+
+当后来作为框架3.0的组成部分的WCF被编写时，其部分目标就是要统一远程与Web
+Services。这需要一个新的序列化引擎－所以诞生了数据约定序列化器。数据约定序列化器统一了以前与消息相关的两个引擎的特点。然而在这种应用环境之外，以前的两个引擎依然重要。
+
+**数据约定序列化器**
+
+数据约定序列化器是最新的，且是三个序列化引擎中最强大的并且为WCF所使用。该序列化器特别在两个应用场景中特别强大：
+
+-  当通过标准兼容的消息协议交换信息时
+-  当我们需要良好的版本容错性并且保留对象引用时
+
+数据约定序列化器支持数据约定模式，从而有助于我们希望序列化的类型的底层细节与序列化数据的结构相分离。这提供了良好的版本容错，意味着我们可以反序列化由类型的以前或是稍后版本序列化的数据。我们甚至可以反序列化已经重命名或是移动到其他不同程序集中的类型。
+
+数据约定序列化器可以处理大多数对象图，尽管比起二进制序列化器他需要更多的辅助。他也可以用作读取/写入XML文件的通用工具，如果我们不介意XML是如何组织的。（如果我们需要以属性存储数据或是处理随机顺序表示的XML元素，我们不能使用数据约定序列化器。）
+
+**二进制序列化器**
+
+二进制序列化器易于使用，高度自动化并且通过.NET框架进行良好的支持。远程使用二进制序列化器－包括相同进程内两个程序域之间通信的情况。
+
+二进制序列化器是高度自动化的：经常的情况是，使得一个复杂的类型成为可完全序列化所需要的仅是一个属性。当需要完全类型精度时，二进制序列化器要比数据约定序列化器快速得多。然而，他将类型的内部结构与序列化数据的格式关联在一起，从而导致了糟糕的版本容错。同时二进制序列化器也不是被设计用来生成XML的，尽管他为基于SOAP的消息提供了一个格式化器，从而提供了与简单类型的有限互操作。
+
+**XmlSerializer**
+
+XML序列化器只能生成XML，而且在保存与恢复复杂对象图方面，他不如其他的引擎强大（他不能恢复共享的对象引用）。然而，在处理任意的XML结构时，他是三个序列化器中最为灵活的。例如，我们可以选择属性是否被序列化到元素或属性以及集合外层元素的处理。同时XML引擎也提供了优秀的版本容错。
+
+XmlSerializer为ASMX Web Services所使用。
+
+**IXmlSerializable**
+
+实现IXmlSerializable意味着我们自己使用XmlReader与XmlWriter处理序列化。IXmlSerializable接口可以同时为XmlSerializer与数据约定序列化器所识别，所以他可以被用来处理更为复杂的类型。（同时他也可以直接为WCF与ASMX
+Web Services所用）我们会在第11章详细描述XmlReader与XmlWriter。
+
+格式化器
+~~~~~~~~
+
+数据约定与二进制序列化器的输出是通过一个插件化的格式化器来生成的。格式化器的角色与两种序列化引擎相同，尽管他们使用完全不同的类来完成相应的工作。
+
+格式化器会调整最终的表示适应特定的媒介或是序列化环境。通常，我们可以在XML与二进制格式化器之间进行选择。XML格式化器被设计用于XML读取器/写入器，文本文件/流或是SOAP消息包。二进制序列化器被设计用于任意的字节流的环境－通常是文件/流或是消息包。二进制输出通常要小于XML。
+
+理论上，引擎与其格式化器相分离。实践中，每一种引擎的设计都会受到一种格式化器类型的激励。
+
+数据约定序列化器
+----------------
+
+下面是使用数据约定序列化器的基本步骤：
+
+#. 确定是否使用DataContractSerializer或是NetDataContractSerializer。
+#. 分别使用[DataContract]与[DataMember]属性来修饰我们希望序列化的类型与成员。
+#. 实例化序列化器并调用WriteObject或ReadObject。
+
+如果我们选择DataContractSerializer，我们将会同时需要注册已知类型（同时可以被序列化的子类型），并且要确定是否要保留对象引用。
+
+同时我们也许会需要执行某些特殊的动作来确保集合被正确的序列化。
+
+DataContractSerializer Versus NetDataContractSerializer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+有两种数据约定序列化器：
+
+-  DataContractSerializer：.NET类型与数据约定类型公耦合
+-  NetDataContractSerializer：.NET类型与数据约定类型松耦合
+
+DataContractSerializer可以生成可互操作的标准XML，例如：
+
+.. code:: xml
+
+    <Person xmlns="...">
+      ...
+    </Person>
+
+然而，这要求我们预先是显式注册可序列化的子类型，从而可以将如Person这样的数据约定正确的映射到.NET类型。NetDataContractSerializer不需要这些辅助，因为其输出其序列化的完全类型与类型的集合名，而不同于二进制序列化引擎：
+
+.. code:: xml
+
+    <Person z:Type="SerialTest.Person" z:Assembly=
+      "SerialTest, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+      ...
+    </Person>
+
+然而这样的输出是专有的。为了进行反序列化，他同时依赖于特定名字空间中特定.NET类型以及程序集的存在。
+
+如果我们正在将一个对象图存储到一个黑盒中，依据哪些优点对于我们更为重要可以选择任一序列化器。如果我们正通过WCF进行通信，或是读写XML文件，我们最可能需要的是DataContractSerializer。
+
+两个序列化器之间另一个区别在于NetDataContractSerializer总是保持引用关系；DataContractSerializer只在需要时进行。
+
+我们会在稍后的内容中深入这些主题。
+
+使用序列化器
+~~~~~~~~~~~~
+
+在选择序列化器之间，下一步就是将属性关联到我们要序列化的类型与成员上。即：
+
+-  为每一种类型添加[DataContract]属性
+-  为我们希望包含的每一个成员添加[DataMember]属性
+
+如下面所示：
+
+.. code:: csharp
+
+    namespace SerialTest
+    {
+      [DataContract] public class Person
+      {
+        [DataMember] public string Name;
+        [DataMember] public int Age;
+      }
+    }
+
+这些属性足够通过数据约定引擎使得类型隐式可序列化。
+
+然后我们可以通过实例化DataContractSerializer或NetDataContractSerialier并调用WriteObject或ReadObject来序列化或反序列化实例：
+
+.. code:: csharp
+
+    Person p = new Person { Name = "Stacey", Age = 30 };
+    var ds = new DataContractSerializer (typeof (Person));
+    using (Stream s = File.Create ("person.xml"))
+      ds.WriteObject (s, p);                            // Serialize
+    Person p2;
+    using (Stream s = File.OpenRead ("person.xml"))
+      p2 = (Person) ds.ReadObject (s);                  // Deserialize
+    Console.WriteLine (p2.Name + " " + p2.Age);         // Stacey 30
+
+DataContractSerializer构造函数需要根对象类型（我们正显式序列化的对象类型）。相对应的，NetDataContractSerializer则不需要：
+
+.. code:: csharp
+
+    var ns = new NetDataContractSerializer();
+    // NetDataContractSerializer is otherwise the same to use
+    // as DataContractSerializer.
+    ...
+
+两种序列化器类型默认使用XML格式化器。通过XmlWriter，我们可以要求输出进行缩进从而更易于阅读：
+
+.. code:: csharp
+
+    Person p = new Person { Name = "Stacey", Age = 30 };
+    var ds = new DataContractSerializer (typeof (Person));
+    XmlWriterSettings settings = new XmlWriterSettings() { Indent = true };
+    using (XmlWriter w = XmlWriter.Create ("person.xml", settings))
+      ds.WriteObject (w, p);
+    System.Diagnostics.Process.Start ("person.xml");
+
+输出结果如下：
+
+.. code:: csharp
+
+    <Person xmlns="http://schemas.datacontract.org/2004/07/SerialTest"
+            xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <Age>30</Age>
+      <Name>Stacey</Name>
+    </Person>
+
+XML元素名反映了数据约定名，默认情况下是.NET类型名。我们可以将其覆盖并显示指定数据约定名，如下所示：
+
+.. code:: csharp
+
+    [DataContract (Name="Candidate")]
+    public class Person { ... }
+
+XML名字空间反映了数据约定名字空间，默认情况下为http://schemas.datacontract.org/2004/07/
+加上.NET类型名字空间。我们也可以使用相同的方式进行覆盖：
+
+.. code:: csharp
+
+    [DataContract (Namespace="http://oreilly.com/nutshell")]
+    public class Person { ... }
+
+我们可以覆盖数据成员的名字：
+
+.. code:: csharp
+
+    [DataContract (Name="Candidate", Namespace="http://oreilly.com/nutshell")]
+    public class Person
+    {
+      [DataMember (Name="FirstName")]  public string Name;
+      [DataMember (Name="ClaimedAge")] public int Age;
+    }
+
+输出结果如下：
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="utf-8"?>
+    <Candidate xmlns="http://oreilly.com/nutshell"
+               xmlns:i="http://www.w3.org/2001/XMLSchema-instance" >
+      <ClaimedAge>30</ClaimedAge>
+      <FirstName>Stacey</FirstName>
+    </Candidate>
+
+[DataMember]同时支持域与属性－public与private。域与属性的数据类型可以是下列类型之一：
+
+-  基本数据类型
+-  DataTime，TimeSpan，Guid，Uri或Enum值
+-  上述值的空版本
+-  byte[]
+-  使用DataContract修饰的任意已知类型
+-  任意IEnumerable类型
+-  具有[Serializable]属性或是实现ISerializable的任意类型
+-  实现IXmlSerializable的任意类型
+
+**指定二进制格式化器**
+
+我们可以通过DataContractSerialier或NetDataContractSerializer使用二进制格式化器：
+
+.. code:: csharp
+
+    Person p = new Person { Name = "Stacey", Age = 30 };
+    var ds = new DataContractSerializer (typeof (Person));
+    var s = new MemoryStream();
+    using (XmlDictionaryWriter w = XmlDictionaryWriter.CreateBinaryWriter (s))
+      ds.WriteObject (w, p);
+     
+    var s2 = new MemoryStream (s.ToArray());
+    Person p2;
+    using (XmlDictionaryReader r = XmlDictionaryReader.CreateBinaryReader (s2,
+                                   XmlDictionaryReaderQuotas.Max))
+      p2 = (Person) ds.ReadObject (r);
+
+其输出要小于XML格式化器的输出，而如果我们的类型包含大数组还会更小。
+
+序列化子类
+~~~~~~~~~~
+
+我们并不需要做某些特殊的事情即可通过NetDataContractSerializer来处理子类的序列化。唯一的要求是子类具有DataContract属性。序列化器将会输出其序列化的实际类型的全名，如下所示：
+
+.. code:: xml
+
+    <Person ... z:Type="SerialTest.Person" z:Assembly=
+      "SerialTest, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+
+然而，DataContractSerializer必须了解其要序列化或反序列化的所有子类型的信息。为了演示，考虑如下的子类Person：
+
+.. code:: csharp
+
+    [DataContract] public class Person
+    {
+      [DataMember] public string Name;
+      [DataMember] public int Age;
+    }
+    [DataContract] public class Student : Person { }
+    [DataContract] public class Teacher : Person { }
+
+然后编写一个方法来拷贝Person：
+
+.. code:: csharp
+
+    static Person DeepClone (Person p)
+    {
+      var ds = new DataContractSerializer (typeof (Person));
+      MemoryStream stream = new MemoryStream();
+      ds.WriteObject (stream, p);
+      stream.Position = 0;
+      return (Person) ds.ReadObject (stream);
+    }
+
+我们可以使用下面的代码：
+
+.. code:: csharp
+
+    Person  person  = new Person  { Name = "Stacey", Age = 30 };
+    Student student = new Student { Name = "Stacey", Age = 30 };
+    Teacher teacher = new Teacher { Name = "Stacey", Age = 30 };
+    Person  p2 =           DeepClone (person);     // OK
+    Student s2 = (Student) DeepClone (student);    // SerializationException
+    Teacher t2 = (Teacher) DeepClone (teacher);    // SerializationException
+
+如果使用Person调用则DeepClone可以正常工作，但是使用Student或Teacher调用则会抛出异常，因为反序列化器并不知道Student或Teacher应解析到哪种.NET类型。这也有助于安全，因为他可以防止未期望类型的反序列化。
+
+解决方案就是指定所有允许或已知的子类型。我们可以在构造DataConstractSerializer时指定：
+
+.. code:: csharp
+
+    var ds = new DataContractSerializer (typeof (Person),
+      new Type[] { typeof (Student), typeof (Teacher) } );
+
+或者通过KnownType属性在本类型本身内指定：
+
+.. code:: csharp
+
+    [DataContract, KnownType (typeof (Student)), KnownType (typeof (Teacher))]
+    public class Person
+    ...
+
+下面是序列化的Student的样子：
+
+.. code:: xml
+
+    <Person xmlns="..."
+            xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
+            i:type="Student" >
+      ...
+    <Person>
+
+因为我们指定Person作为根类型，所以根元素具有相同的名字。实际的子类型在type属性进行单独描述。
+
+对象引用
+~~~~~~~~
+
+对其他对象的引用也可以被序列化。考虑下面的类：
+
+.. code:: csharp
+
+    [DataContract] public class Person
+    {
+      [DataMember] public string Name;
+      [DataMember] public int Age;
+      [DataMember] public Address HomeAddress;
+    }
+    [DataContract] public class Address
+    {
+      [DataMember] public string Street, Postcode;
+    }
+
+下面是使用DataContractSerializer将其序列化XML后的结果：
+
+.. code:: csharp
+
+    <Person...>
+      <Age>...</Age>
+      <HomeAddress>
+        <Street>...</Street>
+        <Postcode>...</Postcode>
+      </HomeAddress>
+      <Name>...</Name>
+    </Person>
+
+如果我们正在使用DataContractSerializer，当派生Address时同样适用该规则。所以如果我们定义一个USAddress，例如：
+
+.. code:: csharp
+
+    [DataContract]
+    public class USAddress : Address { }
+
+并将其实例赋值给Person：
+
+.. code:: csharp
+
+    Person p = new Person { Name = "John", Age = 30 };
+    p.HomeAddress = new USAddress { Street="Fawcett St", Postcode="02138" };
+
+p不会被序列化。解决方法是在Address上应用KnownType属性，如下所示：
+
+.. code:: csharp
+
+    [DataContract, KnownType (typeof (USAddress))]
+    public class Address
+    {
+      [DataMember] public string Street, Postcode;
+    }
+
+或是在构造时告诉DataContractSerializer关于USAddress的信息：
+
+.. code:: csharp
+
+    var ds = new DataContractSerializer (typeof (Person),
+      new Type[] { typeof (USAddress) } );
+
+**保留对象引用**
+
+NetDataContractSerializer总是保持引用平等性。DataContractSerializer并不会这样，除非我们特别要求。
+
+这就意味着如果相同的对象在两个不同的位置被引用，DataContractSerializer会相应的输出两次。所以如果我们修改前面的示例使得Person同时存储工作地址：
+
+.. code:: csharp
+
+    [DataContract] public class Person
+    {
+      ...
+      [DataMember] public Address HomeAddress, WorkAddress;
+    }
+
+然后序列化实例，如下所示：
+
+.. code:: csharp
+
+    Person p = new Person { Name = "Stacey", Age = 30 };
+    p.HomeAddress = new Address { Street = "Odo St", Postcode = "6020" };
+    p.WorkAddress = p.HomeAddress;
+
+我们会看到在XML中看到两次相同的地址信息：
+
+.. code:: xml
+
+    ...
+    <HomeAddress>
+      <Postcode>6020</Postcode>
+      <Street>Odo St</Street>
+    </HomeAddress>
+    ...
+    <WorkAddress>
+      <Postcode>6020</Postcode>
+      <Street>Odo St</Street>
+    </WorkAddress>
+
+当其稍后被反序列化时，WordAddress与HomeAddress将会是不同的对象。这个系统的优点就在于他可以使得XML简单且符合标准，而其缺点则是包含了更大的XML，引用完整性的丢失以及无法处理循环引用。
+
+我们可以通过在构造DataContractSerializer时将preserveObjectReferences指定为true来要求引用完整性。
+
+.. code:: csharp
+
+    var ds = new DataContractSerializer (typeof (Person),
+                                         null, 1000, false, true, null);
+
+当preserveObjectReferences为true时第三个参数是必须的：他指示了序列化器应跟踪的对象引用的最大数目。如果超出这个值序列化器则会抛出异常。
+
+下面是具有相同的家庭与工作地址的Person的XML输出结果：
+
+.. code:: xml
+
+    <Person xmlns="http://schemas.datacontract.org/2004/07/SerialTest"
+            xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/"
+            z:Id="1">
+      <Age>30</Age>
+      <HomeAddress z:Id="2">
+        <Postcode z:Id="3">6020</Postcode>
+        <Street z:Id="4">Odo St</Street>
+      </HomeAddress>
+      <Name z:Id="5">Stacey</Name>
+      <WorkAddress z:Ref="2" i:nil="true" />
+    </Person>
+
+其代价则是互操作性的缺失。
+
+版本容错
+~~~~~~~~
+
+我们可以添加与删除数据成员而不破坏向前或向后兼容性。默认情况下，数据约定反序列化器会执行下列操作：
+
+-  忽略类型中没有[DataMember]的数据
+-  如果序列化流中有[DataMember]丢失而不抱怨
+
+我们不必略过未识别的数据，我们可以指示反序列化器将未识别的数据成员存储到一个黑盒中，然后在类型稍后被重新序列化时进行重放。这可以使得我们正确处理由类型的后续版本序列化的数据。为了实现这一特性，要实现IExtensibleDataObject。这个接口意味着IBlackBoxProvider。他要求我们实现一个属性来获取/设置黑盒：
+
+.. code:: csharp
+
+    [DataContract] public class Person : IExtensibleDataObject{
+      [DataMember] public string Name;
+      [DataMember] public int Age;
+      ExtensionDataObject IExtensibleDataObject.ExtensionData { get; set; }
+    }
+
+**需要的成员**
+
+如果某个成员对于类型来说是必须的，我们可以使用IsRequired来要求其必须存在：
+
+[DataMember (IsRequired=true)] public int ID;
+
+如果该成员不存在，则会在反序列化时抛出异常。
+
+成员顺序
+~~~~~~~~
+
+数据约定序列化器对数据成员的顺序十分挑剔。事实上，反序列化器会忽略任何被认为超出序列的成员。
+
+当序列化时成员以下列顺序进行输出：
+
+#. 基类到子类
+#. 低Order到高Order（对于设置了Order的数据成员）
+#. 字母顺序（使用普通的字符串比较）
+
+所以在前面的示例中，Age位于Name的前面。在下面的示例中，Name在Age的前面：
+
+.. code:: csharp
+
+    [DataContract] public class Person
+    {
+      [DataMember (Order=0)] public string Name;
+      [DataMember (Order=1)] public int Age;
+    }
+
+如果Person具有基类，则基类的数据成员会被首先序列化。
+
+指定顺序的主要原因是要遵守特定的XML
+Schema。XML元素顺序等同于数据成员顺序。
+
+如果我们不需要与其他内容进行互操作，则最简单的方法就是不指定成员Order而完全依赖于字母顺序。当成员被添加或是删除时序列化与反序列之间就不会出现矛盾。唯一的例外就是当我们在基类与子类之间移动成员时。
+
+Null与Empty值
+~~~~~~~~~~~~~
+
+有两种方法处理数据成员的值为null或空：
+
+#. 显示的输出null或是空值（默认情况）
+#. 忽略序列化输出的数据成员
+
+在XML中，显示的null值的样子如下：
+
+.. code:: xml
+
+    <Person xmlns="..."
+               xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+      <Name i:nil="true" />
+    </Person>
+
+输出null或是空成员会浪费空间，特别是在大量的域或属性通常留空的类型上。最重要的是，我们也许遵循希望实质元素而不是nil值的XML
+Schema。
+
+我们可以指示序列化器不要输出null或空值的数据成员，如下所示：
+
+.. code:: csharp
+
+    [DataContract] public class Person
+    {
+      [DataMember (EmitDefaultValue=false)] public string Name;
+      [DataMember (EmitDefaultValue=false)] public int Age;
+    }
+
+如果Name值为null则其会被忽略；如果Age值则其会被忽略。
+
+二进制序列化器
+--------------
+
+二进制序列化引擎是由远程所隐式使用的。他可以用于执行如将对象保存到磁盘以及由磁盘恢复对象这样的任务。二进制序列化引擎是高度自动化并且可以使用最小的干涉处理复杂的对象图。
+
+有两种方法可以使得类型支持二进制序列化。第一种是基于属性的；第二种是实现ISerializable。添加属性更为简单；实现ISerializable更为灵活。我们通常实现ISerializable来：
+
+-  动态控制被序列化的内容
+-  使得我们的可序列化类型可以为其他合作者友好的继承
+
+**开始**
+
+类型可以通过一个属性变为可序列化：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Person
+    {
+      public string Name;
+      public int Age;
+    }
+
+[Serializable]属性指示序列化器在类型中包含所有的域。这会同时包含private与public域（但是不包含属性）。每一个域本身必须是可序列化的；否则会抛出异常。基础.NET类型，例如string与int都支持序列化。
+
+要序列化一个Person实例，我们实例化一个格式化器并且调用Serialize。对于二进制引擎有两种可用的格式化器：
+
+-  BinaryFormatter：这是两者中更为高效的，可以在更少的时间内生成更小的输出。其名字空间是System.Runtime.Serialization.Formatter.Binary。
+-  SoapFormatter：该格式支持远程所用的SOAP风格消息。其名字空间是System.Runtime.Serialization.Formatters.Soap。
+
+BinaryFormatter包含在mscorlib中；SoapFormatter包含在System.Runtime.Serialization.Formatters.Soap.dll中。
+
+两种格式化器的使用完全相同。下面的代码使用一个BinaryFormatter序列化Person：
+
+.. code:: csharp
+
+    Person p = new Person() { Name = "George", Age = 25 };
+    IFormatter formatter = new BinaryFormatter();
+    using (FileStream s = File.Create ("serialized.bin"))
+      formatter.Serialize (s, p);
+
+重新构造Person对象所需要的所有数据被输出到文件serialized.bin中。Deserialize方法重新恢复对象：
+
+.. code:: csharp
+
+    using (FileStream s = File.OpenRead ("serialized.bin"))
+    {
+      Person p2 = (Person) formatter.Deserialize (s);
+      Console.WriteLine (p2.Name + " " + p.Age);     // George 25
+    }
+
+序列化的数据包含完全的类型与程序集信息，所以如果我们尝试转换反序列化的结果与另一个程序集中的Person类型相匹配，则会导致错误。反序列化器会在反序列化时将对象引用恢复到其原始状态。这包括集合。
+
+二进制序列化属性
+----------------
+
+[NonSerialized]
+~~~~~~~~~~~~~~~
+
+不同于数据约定，其中的序列化域具有opt-in策略，二进制引擎具有opt-out策略。我们不希望序列化的域，例如用于临时计算，或是用于存储文件或窗口句柄的域，我们必须使用[NonSerialized]属性进行显式标定：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Person
+    {
+      public string Name;
+      public DateTime DateOfBirth;
+      // Age can be calculated, so there's no need to serialize it.
+      [NonSerialized] public int Age;
+    }
+
+这可以指示序列化器来忽略Age成员。
+
+[OnDeserializing]与[OnDeserialized]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+反序列化会略过我们普通的构造函数以及所有的域初始化。如果所有的域都被序列化则没有太大的问题，但是如果某些域使用[NonSerialized]属性进行标识时则会出现问题。我们可以通过添加一个名为Valid的bool域来进行演示：
+
+.. code:: csharp
+
+    public sealed class Person
+    {
+      public string Name;
+      public DateTime DateOfBirth;
+      [NonSerialized] public int Age;
+      [NonSerialized] public bool Valid = true;
+      public Person() { Valid = true; }
+    }
+
+反序列化的Person将不会是Valid的－尽管构造函数与域初始化器进行了初始化。
+
+解决方法与数据约定序列化器相同：使用[OnDeserializing]属性来定义一个特殊的反序列化“构造函数”。我们使用这个属性进行标识的方法将会在反序列化之前被调用：
+
+.. code:: csharp
+
+    [OnDeserializing]
+    void OnDeserializing (StreamingContext context)
+    {
+      Valid = true;
+    }
+
+同时我们也可以编写一个[OnDeserialized]方法来更新已计算的Age域：
+
+.. code:: csharp
+
+    [OnDeserialized]
+    void OnDeserialized (StreamingContext context)
+    {
+      TimeSpan ts = DateTime.Now - DateOfBirth;
+      Age = ts.Days / 365;                         // Rough age in years
+    }
+
+[OnSerializing]与[OnSerialized]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+二进制引擎也支持[OnSerializing]与[OnSerialized]属性。这可以标定在序列化之前或之后执行的方法。要了解这些属性如何使用，我们将定义一个由泛型List组成的Team类：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Team
+    {
+      public string Name;
+      public List<Person> Players = new List<Person>();
+    }
+
+这个类可以使用二进制格式化器进行正确的序列化与反序列化，但是SOAP格式化器则不可以。这是因为一个不明显的限制：SOAP格式化器拒绝序列化泛型类型。一个简单的解决方法就是在序列化之前将Players转换为数组，然后在反序列化时转换为List。要使其能够工作，我们可以添加另一个域来存储数组，将原始的Players域标记为[NonSerialized]，然后使用下面的代码编写转换：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Team
+    {
+      public string Name;
+      Person[] _playersToSerialize;
+      [NonSerialized] public List<Person> Players = new List<Person>();
+      [OnSerializing]
+      void OnSerializing (StreamingContext context)
+      {
+        _playersToSerialize = Players.ToArray();
+      }
+      [OnSerialized]
+      void OnSerialized (StreamingContext context)
+      {
+        _playersToSerialize = null;   // Allow it to be freed from memory
+      }
+      [OnDeserialized]
+      void OnDeserialized (StreamingContext context)
+      {
+        Players = new List<Person> (_playersToSerialize);
+      }
+    }
+
+[OptionalField]与版本化
+~~~~~~~~~~~~~~~~~~~~~~~
+
+默认情况下，添加域会破坏与已序列化数据的兼容，除非我们新域上关联[OptionalField]属性。
+
+为了进行演示，假定我们由只有一个域的Person类开始。我们团称其为版本1：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Person       // Version 1
+    {
+      public string Name;
+    }
+
+稍后我们意识到需要第二个域，所以我们创建如下的版本2：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Person       // Version 2
+    {
+      public string Name;
+      public DateTime DateOfBirth;
+    }
+
+如果两个计算机通过Remoting来交换Person类，反序列化将会出错，除非我们同时更新到版本2。OptionalField属性可以解决这一问题：
+
+.. code:: csharp
+
+    [Serializable] public sealed class Person       // Version 2 Robust
+    {
+      public string Name;
+      [OptionalField (VersionAdded = 2)] public DateTime DateOfBirth;
+    }
+
+这会告诉反序列化器如果在数据流中没有发现DateOfBirth时不要担心，并将其看作非序列化的域。这意味着我们会得到一个空的DateTime。
+
+VersionAdded参数是我们每次增大类型域时将会增加的整数。这可以起到文档的作用，并且对序列化语义没有副作用。
+
+到目前为止，我们关注向后兼容问题：反序列化器不能在序列化流中查找到所期望的域。但是对于双向交流，当反序列化器遇到不知如何处理的域时会出现前向兼容性问题。二进制格式化器是通过编程丢弃额外的数据来自动处理这种问题；SOAP格式化器则会抛出异常。所以，如果我们的双向交流要求健壮性时我们必须使用二进制格式化器；否则，通过实现ISerializable来手动控制序列化。
+
+使用ISerializable的二进制序列化
+-------------------------------
+
+实现ISerializable可以为类型提供在其二进制序列化与反序列化上的完全控制。
+
+下面是ISerializable接口的定义：
+
+.. code:: csharp
+
+    public interface ISerializable
+    {
+      void GetObjectData (SerializationInfo info, StreamingContext context);
+    }
+
+GetObjectData会在序列化时触发；其任务就是使用我们希望序列化的所有域中的数据来填充SerializationInfo对象。下面显示了我们如何编写GetObjectData方法来序列化Name与DateOfBirth域：
+
+.. code:: csharp
+
+     public virtual void GetObjectData (SerializationInfo info,
+                                         StreamingContext context)
+      {
+        info.AddValue ("Name", Name);
+        info.AddValue ("DateOfBirth", DateOfBirth);
+      }
+
+在这个示例中，我们选择通过相应的域来命名每一项。这并不是必须的；可以使用任意的名字，只要在反序列化时使用相同的名字即可。值本身可以是可序列化的任意类型；框架会在需要时进行递归序列化。在字典中存储null值是合法的。
+
+SerializationInfo同时包含我们可以用来控制类型与程序集的属性。StreamingContext参数是一个包含表明我们序列化的实例位于哪里的一个结构。
+
+除了实现ISerializable，控制其序列化的类型需要提供反序列化构造函数，在其中处理与GetObjectData相同的两个参数。构造函数可以声明为任意的可访问性，而运行时将可以找到他。然而通常，我们将其声明为protected从而可以子类可以进行访问。
+
+在下面的示例中，我们在Team类中实现了ISerializable。当其处理选手List时，我们将数据序列化为数组而不是一个泛型List，从而可以提供与SOAP格式化器的兼容性：
+
+.. code:: csharp
+
+    [Serializable] public class Team : ISerializable
+    {
+      public string Name;
+      public List<Person> Players;
+      public virtual void GetObjectData (SerializationInfo si,
+                                         StreamingContext sc)
+      {
+        si.AddValue ("Name", Name);
+        si.AddValue ("PlayerData", Players.ToArray());
+      }
+      public Team() {}
+      protected Team (SerializationInfo si, StreamingContext sc)
+      {
+        Name = si.GetString ("Name");
+        // Deserialize Players to an array to match our serialization:
+        Person[] a = (Person[]) si.GetValue ("PlayerData", typeof (Person[]));
+        // Construct a new List using this array:
+        Players = new List<Person> (a);
+      }
+    }
+
+对于通常使用的类型，SerializationInfo类具有一个类型化的Get方法，例如GetString，从而使得编写反序列化构造函数更为容易。如果我们指定一个不存在数据的名字，则会抛出异常。这通常发生在执行序列化与反序列化的代码之间版本不匹配的情况。例如，我们已添加了一个额外的域，然而忘记了旧实例中关于反序列化的实现。为了解决这一问题，我们可以：
+
+-  在稍后版本中所添加的获取数据成员处添加异常处理。
+-  实现我们自己的版本计数系统。例如：
+
+.. code:: csharp
+
+    public string MyNewField;
+    public virtual void GetObjectData (SerializationInfo si,
+                                         StreamingContext sc)
+    {
+      si.AddValue ("_version", 2);
+      si.AddValue ("MyNewField", MyNewField);
+      ...
+    }
+    protected Team (SerializationInfo si, StreamingContext sc)
+    {
+      int version = si.GetInt32 ("_version");
+      if (version >= 2) MyNewField = si.GetString ("MyNewField");
+      ...
+    }
+
+**派生可序列化的类**
+
+在前面的示例中，我们将用于序列化的属性的类声明为sealed。要了解为什么，考虑下面的类层次结构：
+
+.. code:: csharp
+
+    [Serializable] public class Person
+    {
+      public string Name;
+      public int Age;
+    }
+    [Serializable] public sealed class Student : Person
+    {
+      public string Course;
+    }
+
+在这个示例中，Person与Student都是可序列化的，而且两个类都使用了默认运行时序列化，因为没有类实现ISerializable。
+
+现在假定Person的开发者出于某种原因决定实现ISerializable并且提供了一个反序列化构造函数来控制Person序列化。新版本的Person如下：
+
+.. code:: csharp
+
+    [Serializable] public class Person : ISerializable
+    {
+      public string Name;
+      public int Age;
+      public virtual void GetObjectData (SerializationInfo si,
+                                         StreamingContext sc)
+      {
+        si.AddValue ("Name", Name);
+        si.AddValue ("Age", Age);
+      }
+      protected Person (SerializationInfo si, StreamingContext sc)
+      {
+        Name = si.GetString ("Name");
+        Age = si.GetInt32 ("Age");
+      }
+      public Person() {}
+    }
+
+尽管这可以用于Person实例，但是这种变化却会破坏Student实例的序列化。序列化Student实例也许会看起来成功了，但是Student中的Course并没有被保存到流中，因为Person上的ISerializable.GetObjectData的实现并不了解Student派生的类型。另外，Student实例的反序列化会抛出异常，因为运行时会在Student上查找反序列化构造函数。
+
+该问题的解决方案就是为public与非sealed的序列化类由最外层实现ISerializable。（对于internal类并不如此重要，因为如果需要我们可以很容易的在稍后修改子类。）
+
+如果我们可以编写前面示例中的Person类，Student可以编写为如下的样子：
+
+.. code:: csharp
+
+    [Serializable]
+    public class Student : Person
+    {
+      public string Course;
+      public override void GetObjectData (SerializationInfo si,
+                                          StreamingContext sc)
+      {
+        base.GetObjectData (si, sc);
+        si.AddValue ("Course", Course);
+      }
+      protected Student (SerializationInfo si, StreamingContext sc)
+        : base (si, sc)
+      {
+        Course = si.GetString ("Course");
+      }
+      public Student() {}
+    }
+
+XML序列化
+---------
+

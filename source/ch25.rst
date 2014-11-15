@@ -1,0 +1,458 @@
+Chapter 25. Native and COM Interoperability
+===========================================
+
+本章描述如何与原生DLL及COM组件进行集成。除非特别说明，本章所提到的类型位于System或是System.Runtime.InteropServices名字空间中。
+
+Calling into Native DLLs
+------------------------
+
+P/Invoke，Platform Invocation
+Services的简写，允许我们访问非托管DLL中的函数，结构以及回调。例如，考虑定义在Windows
+DLL user32.dll中的MessageBox函数：
+
+int MessageBox (HWND hWnd, LPCTSTR lpText, LPCTSTR lpCation, UINT
+uType);
+
+我们可以通过声明一个同名的静态方法，应用extern关键字并且添加DllImport属性来直接调用该函数：
+
+.. code:: csharp
+
+    using System;
+    using System.Runtime.InteropServices;
+    class MsgBoxTest
+    {
+      [DllImport("user32.dll")]
+      static extern int MessageBox (IntPtr hWnd, string text, string caption,
+                                    int type);
+      public static void Main()
+      {
+        MessageBox (IntPtr.Zero,
+                    "Please do not press this again.", "Attention", 0);
+      }
+    }
+
+System.Windows与System.Windows.Forms名字空间扣MessageBox类本身调用类似的非托管方法。
+
+CLR包括一个知道如何在.NET类型与非托管类型之间转换参数与返回值的marshaler。在这个示例中，int参数直接转换为函数所希望的4字节整数，而string参数被转换为null结束的2字节Unicode字符数组。IntPtr是一个设计为封装非托管句柄的结构，并且在32位平台上为32位宽度，在64位平台上为64位宽度。
+
+Type Marshaling
+---------------
+
+Marshaling Common Types
+-----------------------
+
+在非托管的一侧，可以有多种方法来表示指定的数据类型。例如，一个字符串可以包含单字节的ANSI字符或是双字节的Unicode字符，而且可以是前缀长度，null结束或是固定长度的。使用MarshalAs属性，我们可以告诉CLR
+marshaler所使用的变体，从而他可以提供正确的转换。如下面的示例所示：
+
+.. code:: csharp
+
+    [DllImport("...")]
+    static extern int Foo ( [MarshalAs (UnmanagedType.LPStr)] string s );
+
+UnmanagedType枚举包含marshaler所理解的所有Win32与COM类型。在这个示例中，marshaler被通知转换为LPStr，这是一个null结束的单字节ANSI字符串。（所有的UnmanagedType成员列在本章的结束处。）
+
+在.NET一侧，对于使用哪种数据类型，我们也可以有多种选择。例如，非托管句柄可以映射为IntPtr，int，unit，long或是ulong。
+
+注意，大多数的非托管句柄封装一个地址或是指针，为了与32位及64位操作系统兼容必须被映射为IntPtr。一个常见的示例就是HWND。
+
+通常对于Win32函数，我们会遇到接受常量集合的整型参数，这些常量定义一个C++头文件中，例如WinUser.h。我们并不会将这些常量定义为简单的C#常量，相反，我们在一个枚举中进行定义。使用枚举可以使得代码更整洁，且增加静态类型安全。我们会在稍后的章节中提供一个示例。
+
+接收由非托管代码块到.NET的字符串需要某些内存管理发生作用。如果我们使用StringBuilder而不是string来声明外部方法，marshaler就会自动执行相应的转换工作，如下所示：
+
+.. code:: csharp
+
+    using System;
+    using System.Text;
+    using System.Runtime.InteropServices;
+    class Test
+    {
+      [DllImport("kernel32.dll")]
+      static extern int GetWindowsDirectory (StringBuilder sb, int maxChars);
+      static void Main()
+      {
+        StringBuilder s = new StringBuilder (256);
+        GetWindowsDirectory (s, 256);
+        Console.WriteLine (s);
+      }
+    }
+
+Marshaling Classes and Structs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+有时我们需要向非托管方法传递一个结构。例如，Win32
+API中的GetSystemTime方法定义如下：
+
+void GetSystemTime (LPSYSTEMTIME lpSystemTime);
+
+LPSYSTEMTIME指向如下的C结构：
+
+.. code:: c
+
+    typedef struct _SYSTEMTIME {
+      WORD wYear;
+      WORD wMonth;
+      WORD wDayOfWeek;
+      WORD wDay;
+      WORD wHour;
+      WORD wMinute;
+      WORD wSecond;
+      WORD wMilliseconds;
+    } SYSTEMTIME, *PSYSTEMTIME;
+
+为了调用GetSystemTime，我们必须定义与该C结构匹配的.NET类或结构：
+
+.. code:: csharp
+
+    using System;
+    using System.Runtime.InteropServices;
+    [StructLayout(LayoutKind.Sequential)]
+    class SystemTime
+    {
+       public ushort Year;
+       public ushort Month;
+       public ushort DayOfWeek;
+       public ushort Day;
+       public ushort Hour;
+       public ushort Minute;
+       public ushort Second;
+       public ushort Milliseconds;
+    }
+
+StructLayout属性指示marshaler如何将每一个域映射到非托管代码。LayoutKind.Sequential着我们希望域顺序排列，就如同C结构中一样。这里的域名是无关的；域的顺序才是重要的。
+
+现在我们可以调用GetSystemTime：
+
+.. code:: csharp
+
+    [DllImport("kernel32.dll")]
+    static extern void GetSystemTime (SystemTime t);
+    static void Main()
+    {
+      SystemTime t = new SystemTime();
+      GetSystemTime (t);
+      Console.WriteLine (t.Year);
+    }
+
+在C与C#中，对象中的域都位于该对象起始地址的n字节处。区别在于在C#程序中，CLR通过域的名字来查找偏移量；C域的名字被直接编译为偏移量。例如，在C语言中，wDay仅是一个表示SystemTime实例地址偏移24字节处的标记。
+
+对于访问速度，每个域都位于该域大小的整倍数的偏移量处。然而这个整倍数被限制为x字节的最大值，其中x是pack
+size（对齐大小）。在当前的实现中，默认的对齐大小为8字节，由一个sbyte后跟一个long（8个字节）所构成的结构会占用16个字节，而sbyte之后的7个字节就会被浪费。我们可以通过StructLayout属性的Pack属性指定对齐大小来减少这种浪费：这会使得域在指定对齐大小的整倍数的偏移量处对齐。所以对于对齐大小为1，前面所描述的结构就会占用9个字节。我们可以将对齐大小指定为1，2，4，8或是16字节。
+
+StructLayout属性同时允许我们指定显示的域偏移量。
+
+In and Out Marshaling
+~~~~~~~~~~~~~~~~~~~~~
+
+在前面的示例中，我们将会SystemTime实现为一个类。我们本可以选择结构－只要GetSystemTime使用ref或out参数进行声明：
+
+.. code:: csharp
+
+    [DllImport("kernel32.dll")]
+    static extern void GetSystemTime (out SystemTime t);
+
+在大多数情况下，C#的方向参数语义同样适用于外部方法。按值传递参数向内拷贝，C#
+ref参数向内/向外拷贝，而C#
+out参数向外拷贝。然而，对于特殊转换的类型则有一些例外。例如，数组类与StringBuilder类在用于函数时需要拷贝，所以他们是向内/向外。有时使用In与Out属性覆盖这种行为将会非常有用。例如，如果一个数组应是只坊的，in修饰符表明只允许向函数内拷贝数组，而不能向外拷贝：
+
+.. code:: csharp
+
+    static extern void Foo ( [In] int[] array);
+
+Callback from Unmanaged Code
+----------------------------
+
+P/Invoker层会尽量在边界两边表示一个自然编程模式，可能时在相关的结构之间进行映射。因为C#不仅可以调用C函数，而且可以在C函数内进行调用（通过函数指针），P/Invokder层需要将非托管的函数指针映射到托管世界的某些自然编程模式上。函数指针的托管对应是代理，所以P/Invokder层会自动在代理（C#中）与函数指针（C中）之间进行映射。
+
+作为一个示例，我们可以使用User32.dll中的方法来遍历所有的顶级窗口句柄：
+
+BOOL EnumWindows (WNDENUMPROC lpEnumFunc, LPARAM lParam);
+
+WNDENUMPROC是每一个窗口句柄依次触发的回调函数（或是直到回调函数返回false）。下面是其定义：
+
+BOOL CALLBACK EnumWindowsProc (HWND hwnd, LPARAM lParam);
+
+为了使用该方法，我们声明一个具有匹配签名的代理，然后向外部方法传递一个代理实例：
+
+.. code:: csharp
+
+    using System;
+    using System.Runtime.InteropServices;
+    class CallbackFun
+    {
+      delegate bool EnumWindowsCallback (IntPtr hWnd, IntPtr lParam);
+      [DllImport("user32.dll")]
+      static extern int EnumWindows (EnumWindowsCallback hWnd, IntPtr lParam);
+      static bool PrintWindow (IntPtr hWnd, IntPtr lParam)
+      {
+        Console.WriteLine (hWnd.ToInt64());
+        return true;
+      }
+      static void Main()
+      {
+        EnumWindows (PrintWindow, IntPtr.Zero);
+      }
+    }
+
+Simulating a C Union
+--------------------
+
+struct中的每一个域被会被提供足够的空间来存储其数据。考虑一个包含一个int与一个char的struct。int可能由偏移量0开始，并且到少是四个字节。所以char到少由偏移量4开始。如果由于某些原因，char由偏移量2开始，如果我们为char赋值则会修改int的值。听起来很混乱，不是吗？更奇怪的是，C语言所支持的一种被称为联合的结构的变体就是这样的。我们可以在C#中使用LayoutKind.Explicit与FieldOffset属性来进行模拟。
+
+也许很难想像这种情况会很有用。然而，假定我们要在外部合成器上尝试某些音符。Windows
+Multimedia API通过MIDI协议提供了一个函数来完成该操作：
+
+.. code:: csharp
+
+    [DllImport ("winmm.dll")]
+    public static extern uint midiOutShortMsg (IntPtr handle, uint message);
+
+第二个参数，message，描述播放哪些音符。构造这个无符号32位整数的问题在于：他在内部被分割为字节，表示MIDI通道，音符以及打击速率。一个解决方案是通过移位并通过位操作<<，>>，&与\|操作符进行掩码来由32位打包消息进行转换。然而更为简单的方法是使用显式布局定义一个结构：
+
+.. code:: csharp
+
+    [StructLayout (LayoutKind.Explicit)]
+    public struct NoteMessage
+    {
+      [FieldOffset(0)] public uint PackedMsg;    // 4 bytes long
+      [FieldOffset(0)] public byte Channel;      // FieldOffset also at 0
+      [FieldOffset(1)] public byte Note;
+      [FieldOffset(2)] public byte Velocity;
+    }
+
+Channel，Note与Velocity域故意在32位打包消息上进行重叠。这允许我们进行任意的读取与写入。并不需要为了保持其他域的同步而进行的计算：
+
+.. code:: csharp
+
+    NoteMessage n = new NoteMessage();
+    Console.WriteLine (n.PackedMsg);    // 0
+    n.Channel = 10;
+    n.Note = 100;
+    n.Velocity = 50;
+    Console.WriteLine (n.PackedMsg);    // 3302410
+    n.PackedMsg = 3328010;
+    Console.WriteLine (n.Note);         // 200
+
+Shared Memory
+-------------
+
+内存映射文件，或共享内存，是Windows中允许相同计算机上多个进程共享数据而无需Remoting或WCF负担的一个特性。共享内存速度非常快，并且与管道不同，对共享数据提供了随机访问。我们在第14章中了解了如何使用框架4.0中新的MemoryMapped类来访问内存映射文件；除了这种方法，直接调用Win32方法是演示P/Invokder的一个好方式。
+
+Win32的CreateFileMapping函数分配共享内存。我们告诉该函数我们所需要的字节以及我们希望标识该共享内存的名字。然后其他的程序可以通过相同的名字调用OpenFileMapping来订阅该内存。两个方法都会返回一个句柄，我们可以通过调用MapViewOfFile将其转换为指针。
+
+下面是封装对共享内存访问的类：
+
+.. code:: csharp
+
+    using System;
+    using System.Runtime.InteropServices;
+    public sealed class SharedMem : IDisposable
+    {
+      // Here we're using enums because they're safer than constants
+      enum FileProtection : uint      // constants from winnt.h
+      {
+        ReadOnly = 2,
+        ReadWrite = 4
+      }
+      enum FileRights : uint          // constants from WinBASE.h
+      {
+        Read = 4,
+        Write = 2,
+        ReadWrite = Read + Write
+      }
+      static readonly IntPtr NoFileHandle = new IntPtr (-1);
+      [DllImport ("kernel32.dll", SetLastError = true)]
+      static extern IntPtr CreateFileMapping (IntPtr hFile,
+                                              int lpAttributes,
+                                              FileProtection flProtec
+                                              uint dwMaximumSizeHigh,
+                                              uint dwMaximumSizeLow,
+                                              string lpName);
+                                          FileRights dwDesiredAccess,
+                                          uint dwFileOffsetHigh,
+                                          uint dwFileOffsetLow,
+                                          uint dwNumberOfBytesToMap);
+      [DllImport ("Kernel32.dll", SetLastError = true)]
+      static extern bool UnmapViewOfFile (IntPtr map);
+      [DllImport ("kernel32.dll", SetLastError = true)]
+      static extern int CloseHandle (IntPtr hObject);
+      IntPtr fileHandle, fileMap;
+      public IntPtr Root { get { return fileMap; } }
+      public SharedMem (string name, bool existing, uint sizeInBytes)
+      {
+        if (existing)
+          fileHandle = OpenFileMapping (FileRights.ReadWrite, false, name);
+        else
+          fileHandle = CreateFileMapping (NoFileHandle, 0,
+                                          FileProtection.ReadWrite,
+                                          0, sizeInBytes, name);
+        if (fileHandle == IntPtr.Zero)
+          throw new Win32Exception();
+        // Obtain a read/write map for the entire file
+        fileMap = MapViewOfFile (fileHandle, FileRights.ReadWrite, 0, 0, 0);
+        if (fileMap == IntPtr.Zero)
+          throw new Win32Exception();
+      }
+      public void Dispose()
+      {
+        if (fileMap != IntPtr.Zero) UnmapViewOfFile (fileMap);
+        if (fileHandle != IntPtr.Zero) CloseHandle (fileHandle);
+        fileMap = fileHandle = IntPtr.Zero;
+      }
+    }
+
+在这个示例中，我们在DllImport方法上设置SetLastError=true使用SetLastError协议用于发送错误代码。这可以保证当异常被抛出时，Win32Exception封装有详细的错误信息。（他也可以允许我们通过调用Marhal.GetLastWin32Error来显式查询错误。）
+
+为了演示这个类，我们需要运行两个程序。第一个创建共享内存，如下所示：
+
+.. code:: csharp
+
+    using (SharedMem sm = new SharedMem ("MyShare", false, 1000))
+    {
+      IntPtr root = sm.Root;
+      // I have shared memory!
+      Console.ReadLine();         // Here's where we start a second app...
+    }
+
+第二个程序通过使用existing参数为true构造相同名字的SahredMem对象来订阅该共享内存：
+
+.. code:: csharp
+
+    using (SharedMem sm = new SharedMem ("MyShare", true, 1000))
+    {
+      IntPtr root = sm.Root;
+      // I have the same shared memory!
+      // ...
+    }
+
+结果就是每一个程序都有一个IntPtr-指向（相同）非托管内存的指针。现在这个两个程序需要通过这个共同的指针来读取与写入内存。一个方法是写封装所有共享数据的可序列化类，然后使用UnmanagedMemoryStream将数据序列化（与反序列化）到非托管内存。然而，如果有大量的数据，这种方法效率很低。想像一个如果共享内存类具有兆级数据，而仅有一个整数需要更新。更好的方法是将共享数据定义为结构，然后将其直接映射到共享内存。我们会在下面的内容中进行讨论。
+
+Mapping a Struct to Unmanaged Memory
+------------------------------------
+
+具有Sequential或Explicit的StructLayout的结构可以被直接映射到托管内存。考虑下面的结构：
+
+.. code:: csharp
+
+    [StructLayout (LayoutKind.Sequential)]
+    unsafe struct MySharedData
+    {
+      public int Value;
+      public char Letter;
+      public fixed float Numbers [50];
+    }
+
+fixed指令允许我们定义固定长度的值类型数组，而且也是将我们带入unsafe领域的关键。在这个结构内部会为50个浮点数分配空间。与标准的C#数组不同，NumberArray并不是指向数组的引用-他就是数组。如果我们运行下面的程序：
+
+.. code:: csharp
+
+    static unsafe void Main()
+    {
+      Console.WriteLine (sizeof (MySharedData));
+    }
+
+结果是208：50个4字节的浮点数，加上Value整数的4个字节，加上Letter字符的2个字节。由于floats是4字节对齐的，所有206被近似为208。
+
+最简单的，我们可以使用栈分配内存在unsafe环境内演示MySharedData：
+
+.. code:: csharp
+
+    MySharedData d;
+    MySharedData* data = &d;       // Get the address of d
+    data->Value = 123;
+    data->Letter = 'X';
+    data->Numbers[10] = 1.45f;
+
+或者：
+
+.. code:: csharp
+
+    // Allocate the array on the stack:
+    MySharedData* data = stackalloc MySharedData[1];
+    data->Value = 123;
+    data->Letter = 'X';
+    data->Numbers[10] = 1.45f;
+
+当然，我们并不是在演示在托管环境中不可以实现的内容。然而，假定我们希望在CLR垃圾回收领域之外的非托管堆上存储MyShareData实例。这正是指针真正派上用场的地方：
+
+.. code:: csharp
+
+    MySharedData* data = (MySharedData*)
+      Marshal.AllocHGlobal (sizeof (MySharedData)).ToPointer();
+    data->Value = 123;
+    data->Letter = 'X';
+    data->Numbers[10] = 1.45f;
+
+Marshal.AllocHGlobal在非托管堆上分配内存。下面是在稍后如何释放内存的代码：
+
+Marshal.FreeHGlobal (new IntPtr (data));
+
+忘记释放内存的结果就是古老的内存泄露问题。
+
+为了与其名字保持一致，现在我们将配合我们在前面所编写的SharedMem类来使用MySharedData。下面的程序将会分配一块共享内存，然后将MySharedData结构映射到该内存块：
+
+.. code:: csharp
+
+    static unsafe void Main()
+    {
+      using (SharedMem sm = new SharedMem ("MyShare", false, 1000))
+      {
+        void* root = sm.Root.ToPointer();
+        MySharedData* data = (MySharedData*) root;
+        data->Value = 123;
+        data->Letter = 'X';
+        data->Numbers[10] = 1.45f;
+        Console.WriteLine ("Written to shared memory");
+        Console.ReadLine();
+        Console.WriteLine ("Value is " + data->Value);
+        Console.WriteLine ("Letter is " + data->Letter);
+        Console.WriteLine ("11th Number is " + data->Numbers[10]);
+        Console.ReadLine();
+      }
+    }
+
+不要为指针所阻止：C++程序员在整个程序中使用指针并且能够使得一切运行正常。至少大多数时候如此！比较起来这种用法非常简单。
+
+事实上，我们示例是不安全的，除了表面上的不安全，还有另一个原因。我们并没有考虑两个程序同时访问相同的内存时会导致的线程安全问题。为了在产品应用中使用这个示例，我们需要为MySharedData结构中的Value与Letter域添加volatile关键字来避免这些域在CPU注册器中进行缓存。而且，随着我们与这些域的交互变得复杂时，很可能我们需要通过跨进程的Mutex来保护访问，正如我们在多线程程序中使用lock语句来保护对域的访问一样。我们在第21章讨论了线程安全问题。
+
+**fixed与fixed{}**
+
+将结构直接映射到内存的不足之处在于结构只能包含非托管类型。例如，如果我们需要共享字符串数据，我们必须使用固定的字符数组进行替代。这就意味着与string类型的手工转换。下面的代码显示了如何实现：
+
+.. code:: csharp
+
+    [StructLayout (LayoutKind.Sequential)]
+    unsafe struct MySharedData
+    {
+      ...
+      // Allocate space for 200 chars (i.e., 400 bytes).
+      const int MessageSize = 200;
+      fixed char message [MessageSize];
+      // One would most likely put this code into a helper class:
+      public string Message
+      {
+        get { fixed (char* cp = message) return new string (cp); }
+        set
+        {
+          fixed (char* cp = message)
+          {
+            int i = 0;
+            for (; i < value.Length && i < MessageSize - 1; i++)
+              cp [i] = value [i];
+            // Add the null terminator
+            cp [i] = '\0';
+          }
+        }
+      }
+    }
+
+通过fixed关键字的第一次使用，我们为结构中的200个字符分配空间。当在稍后的属性定义中使用时，相同的关键字则具有不同的意义。他通知CLR在fixed块内部可以执行垃圾回收，但是不要在内存堆上移动底层结构，因为其内容是通过直接内存指针进行指向的。查看我们的程序，我们也许会想知道如果MySharedData没有位于堆上，他是如何在内存中移动的，但是在非托管的世界中，垃圾回收并没有这些权限。然而编译器并不知道这些，并且认为我们也许是在托管环境中使用MyShardData，所以要求我们必须添加fixed关键字，来为我们在托管环境中提供unsafe代码。下面是代码是编译器将MySharedData放置在堆上所需要做：
+
+object obj = new MySharedData();
+
+这会在堆上生成一个装箱的MySharedData，并且垃圾回收期间满足传输的条件。
+
+这个示例演示了一个字符串如何在映射到非托管内存的结构中进行表示。对于更为复杂的类型，我们也具有使用已有序列化代码的选项。唯一的限制条件就是序列化的数据不要超出结构中所分配空间的长度。
+
+COM Interoperability
+--------------------
+

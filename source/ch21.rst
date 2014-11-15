@@ -1,0 +1,1389 @@
+Chapter 21. Threading
+=====================
+
+C#允许我们通过多线程并行执行代码。
+
+线程类似于我的程序运行所在的操作系统进程。类似于进程在一个计算机上并行运行，线程在一个进程内并行运行。进程彼此之间是完全隔离的；线程只具有有限的隔离。通常情况下，线程与运行在相同程序中的其他线程共享（堆）内存。这在某种程度上是线程为什么有用的原因：例如，一个线程可以在后台获取数据，而另一个线程可以在数据到达时显示数据。
+
+本章描述用于创建，配置，线程交互以及如何通过锁和信号协调线程动作的语言和框架特性。同时描述辅助线程的基本预定义类型，例如BackgroundWorker与Timer类。
+
+线程的使用与烂用
+----------------
+
+多线程有许多用处；下面是多线程最通常的应用：
+
+开始
+----
+
+客户程序（Console，WPF或是Windows
+Forms）在一个由CLR与操作系统自动创建的单线程中启动。这里他作为单线程程序结束生命周期，除非我们通过创建多线程执行其他一些操作。
+
+我们可以通过实例化一个Thread对象并调用其Start方法来创建并启动一个新线程。Thread的最简单的构造器需要一个ThreadStart委托：表明由哪里开始执行的一个无参数方法。例如，如下面的代码：
+
+.. code:: csharp
+
+    class ThreadTest
+    {
+      static void Main()
+      {
+        Thread t = new Thread (WriteY);          // Kick off a new thread
+        t.Start();                               // running WriteY()
+        // Simultaneously, do something on the main thread.
+        for (int i = 0; i < 1000; i++) Console.Write ("x");
+      }
+      static void WriteY()
+      {
+        for (int i = 0; i < 1000; i++) Console.Write ("y");
+      }
+    }
+    // Output:
+    xxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyy
+    yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyxxxxxxxxxxxxxxxxxxxxxx
+    xxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+    yyyyyyyyyyyyyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ...
+
+主线程创建一个新线程t，并在些基础上运行重复输出字符y的方法。同时主线程重复输出字符x，如图21-1所示。在单核的计算机上，操作系统必须为每一个线程分配时间片来模拟并行，从而产生x与y的重复块。在一个多核或是多处理器的机器上，这两个线程可以实现真正的并行，尽管我们仍然会得到x与y的重复块，这是由Console处理并发请求的机制导致的。
+
+线程一旦启动，线程的IsAllive属性返回true，直到线程的结束点。当传递给Thread的构造器的委托执行完成时，线程结束。一旦结束，线程不能重新启动。
+
+我们可以通过调用线程的Join方法来等待另一个线程的结束。如下面的示例：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Thread t = new Thread (Go);
+      t.Start();
+      t.Join();
+      Console.WriteLine ("Thread t has ended!");
+    }
+    static void Go() { for (int i = 0; i < 1000; i++) Console.Write ("y"); }
+
+这会输出y 1000次，然后是Thread t has
+ended!。当调用Join时我们可以包含一个超时，以毫秒或是TimeSpan形式。如果线程结束则返回true，如果超时则返回false。
+
+Thread.Sleep会将当前的线程挂起一段时间：
+
+.. code:: csharp
+
+    Thread.Sleep (TimeSpan.FromHours (1));  // sleep for 1 hour
+    Thread.Sleep (500);                     // sleep for 500 milliseconds
+
+Thread.Sleep(0)会立即放弃线程当前的时间片，自愿的将CPU交给其他的线程。Framework
+4.0新的Thread.Yield()方法会执行相同的操作－所不同的是他只放弃给运行在相同处理器上的其他线程。
+
+每一个线程都有一个Name属性，我们可以为了调试的目的进行设置。这在Visual
+Studio中特别有用，因为线程的名字会显示在线程窗口与Debug
+Location工具栏上。我们只能设置一次线程的名字；以后尝试修改会抛出异常。
+
+静态的Thread.CurrentThread属性会返回当前正在运行的线程：
+
+Console.WriteLine (Thread.CurrentThread.Name);
+
+向线程提供数据
+~~~~~~~~~~~~~~
+
+向线程的目标方法传递参数的最简单的方法就是执行使用所需要的参数调用方法的Lambda表达式：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Thread t = new Thread ( () => Print ("Hello from t!") );
+      t.Start();
+    }
+    static void Print (string message) { Console.WriteLine (message); }
+
+使用这个方法，我们可以向方法传递任意数量的参数。我们甚至可以将整个实现封装为一个多语句的Lambda：
+
+.. code:: csharp
+
+    new Thread (() =>
+    {
+      Console.WriteLine ("I'm running on another thread!");
+      Console.WriteLine ("This is so easy!");
+    }).Start();
+
+在C# 2.0中我们也可以很容易的使用匿名方法来执行相同的操作：
+
+.. code:: csharp
+
+    new Thread (delegate()
+    {
+      ...
+    }).Start();
+
+另一个技术则是向Thread的Start方法传递参数：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Thread t = new Thread (Print);
+      t.Start ("Hello from t!");
+    }
+    static void Print (object messageObj)
+    {
+      string message = (string) messageObj;   // We need to cast here
+      Console.WriteLine (message);
+    }
+
+之所以可以这样是因为Thread的构造器被重载来接受两个委托中的任意一个：
+
+.. code:: csharp
+
+    public delegate void ThreadStart();
+    public delegate void ParameterizedThreadStart (object obj);
+
+ParameterizedThreadStart的限制是他只接受一个参数。并且由于他是object类型，通常需要转换。
+
+**Lambda表达式与捕获变量**
+
+正如我们所看到的，Lambda表达式是向线程传递数据的最强大的方法。然而，然而我们必须小心在启动线程之后偶然修改捕获变量。例如，考虑下面的示例：
+
+.. code:: csharp
+
+    for (int i = 0; i < 10; i++)
+      new Thread (() => Console.Write (i)).Start();
+
+其输出是不确定的！下面是一种结果：
+
+0223557799
+
+问题在于变量i在整个循环生命周期中指向相同的内存地址。所以，每一个线程都是在一个运行时值会发生变量的变量上调用Console.Write！解决方法就是使用临时变量，如下所示：
+
+.. code:: csharp
+
+    for (int i = 0; i < 10; i++)
+    {
+      int temp = i;
+      new Thread (() => Console.Write (temp)).Start();
+    }
+
+现在temp是局限于每一个循环迭代的。所以，每一个线程会捕获一个不同的内存地址，从而不会产生问题。我们可以简单的使用下面的示例使用更为简单的代码来演示前面的问题：
+
+.. code:: csharp
+
+    string text = "t1";
+    Thread t1 = new Thread ( () => Console.WriteLine (text) );
+    text = "t2";
+    Thread t2 = new Thread ( () => Console.WriteLine (text) );
+    t1.Start();
+    t2.Start();
+
+其输出结果为：
+
+.. code:: csharp
+
+    t2
+    t2
+
+在线程间共享数据
+~~~~~~~~~~~~~~~~
+
+前面的示例演示了在线程之间共享捕获变量。让我们后退一步并检测一下在更为简单的没有调用Lambda表达式或匿名方法的情况使用局部变量会发生什么情况。考虑下面的程序：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      new Thread (Go).Start();      // Call Go() on a new thread
+      Go();                         // Call Go() on the main thread
+    }
+    static void Go()
+    {
+      // Declare and use a local variable - 'cycles'
+      for (int cycles = 0; cycles < 5; cycles++) Console.Write (cycles);
+    }
+    // OUTPUT:  0123401234
+
+当进入Go方法时，每一个线程会获得一份单独的周期变量的拷贝，从而不会与另一个并发线程相影响。CLR与操作系统是通过为局部变量赋一个线程专有的私有内存栈来实现的。
+
+如果线程希望共享数据，这可以通过共同的引用来实现。这可以是我们前面所看到的捕获变量－但是域的情况更为常见。如下面的示例：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Introducer intro = new Introducer();
+      intro.Message = "Hello";
+      var t = new Thread (intro.Run);
+      t.Start(); t.Join();
+      Console.WriteLine (intro.Reply);
+    }
+    class Introducer
+    {
+      public string Message;
+      public string Reply;
+      public void Run()
+      {
+        Console.WriteLine (Message);
+        Reply = "Hi right back!";
+      }
+    }
+    // Output:
+    Hello
+    Hi right back!
+
+共享域同时可以向新线程传送数据以及稍后由其获取返回数据。而且，他可以使得线程在运行时彼此通信。共享域可以是实例或是静态的。
+
+前台与后台线程
+~~~~~~~~~~~~~~
+
+默认情况下，我们显式创建的线程是前台线程。只要有一个前台线程在运行，前台线程就可以使得程序保持存活，而后台线程并不会这样。一旦所有的前台线程完成，而后台线程依然运行直到突然结束。
+
+我们可以使用线程的IsBackground属性来查询或是修改线程的后台状态。如下面的示例：
+
+.. code:: csharp
+
+    class PriorityTest
+    {
+      static void Main (string[] args)
+      {
+        Thread worker = new Thread ( () => Console.ReadLine() );
+        if (args.Length > 0) worker.IsBackground = true;
+        worker.Start();
+      }
+    }
+
+如果这个程序以无参数的形式调用，工作线程会假定前台状态并且会等待用户输入回车的ReadLine语句。同时，主线程退出，但是程序仍然在运行，因为有一个前台线程依然存活。
+
+相反，如果参数被传递给Main()，工作线程被赋值为后台状态，而当主线程退出时，程序几乎是立即退出。
+
+当一个进程以这种方式结束时，后台线程执行栈中的finally块就会被避开。如果我们的程序依赖finally（或是using）块来执行清理工作，例如释放资源或是删除临时文件，则是一个问题。为了避免这一问题，在退出程序时我们可以显式的等待这些后台线程。有两种方法可以实现这一目的：
+
+-  如果我们自己创建了线程，在线程上调用Join方法。
+-  如果我们使用池线程，使用事件等待句柄。
+
+在任一种况下，我们都应指定一个超时时间，从而我们可以放弃由于某种原因而拒绝完成的线程。这是我们的后备退出策略：最后，我们希望我们的程序关闭－而无需用户由任务管理器中结束。
+
+前台线程不需要这种处理，但是我们必须小心避免会使得线程没有结束的bug。程序退出失败最可能的原因就是活跃的前台线程的存在。
+
+线程优先级
+~~~~~~~~~~
+
+线程的优先级决定了相对于操作系统中的其他活跃线程，他可以获得多少执行时间，线程优先级值如下：
+
+enum ThreadPriority { Lowest, BelowNormal, Normal, AboveNormal, Highest
+}
+
+只有当多个线程同时活跃时，线程优先级才有意义。
+
+仅是提升线程的优先级并且使用执行实时的工作，因为他还受到程序进程优先的限制。要进行实时的工作，我们必须同时使用System.Diagnostics中的Process类来提升进程的优先级。
+
+.. code:: csharp
+
+    using (Process p = Process.GetCurrentProcess())
+      p.PriorityClass = ProcessPriorityClass.High;
+
+ProcessPriorityClass.High实际上就是最高优先级：Realtime。将一个进程的优先级设置为Realtime即是通知OS我们绝不希望该进程将CPU时间交给其他进程。如果我们的程序恰好进入了无限循环，我们就会发现甚至是操作系统也被锁住了，也不会电源按钮来拯救我们。正是由于这一原因，High通常是实时程序的最好选择。
+
+注意：如果我们的实时拥有用户界面，提升进程的优先级会使得屏幕更新超出CPU时间，降低整台机器的速度（特别是如果UI很复杂时）。降低主线程的优先级结合提升进程的优先级可以保证实时线程不会被屏幕重绘所抢占，但是依然没有解决问题，因为操作系统依然作为一个整体的进程分配不成比例的资源。一个完美的解决方案就是拥有一个实时进程，同时用户界面作为一个具有不同进程优先级的单独程序来运行，彼此之间通过远程或是内存映射文件进行通信。内存映射文件十分适用于这一任务；我们会在第14章与25章中解释其如何工作。
+
+即使是提升了进程优先级，但是在处理硬实时需求时依然存在托管环境适用性的限制。在第12章中，我们描述了垃圾回收的问题。进一步说，操作系统也会面临其他的挑战－即使是对非托管程序－这可以通过特殊的硬件或是特殊的实时平台得到最好的解决。
+
+异常处理
+~~~~~~~~
+
+当线程被创建并开始执行时，则作用域内的try/catch/finally块则与该线程不再有任何关系。考虑下面的程序：
+
+.. code:: csharp
+
+    public static void Main()
+    {
+      try
+      {
+        new Thread (Go).Start();
+      }
+      catch (Exception ex)
+      {
+        // We'll never get here!
+        Console.WriteLine ("Exception!");
+      }
+    }
+    static void Go() { throw null; }   // Throws a NullReferenceException
+
+这个示例中的try/catch语句是无效的，而新创建的线程将会遇到一个未处理的NullReferenceException。当我们认为每一个线程具有独立的执行路径时，这种行为就可以理解了。
+
+修改方法是将异常处理器移到Go方法中：
+
+.. code:: csharp
+
+    public static void Main()
+    {
+       new Thread (Go).Start();
+    }
+    static void Go()
+    {
+      try
+      {
+        ...
+        throw null;    // The NullReferenceException will get caught below
+        ...
+      }
+      catch (Exception ex)
+      {
+        Typically log the exception, and/or signal another thread
+        that we've come unstuck
+        ...
+      }
+    }
+
+我们在生产程序中所有线程入口函数处都需要一个异常处理器，就如同我们在主线程所做的这样。未处理的异常会使得整个程序停止运行，并提示一个讨厌的对话框。
+
+然而，在某些情况下，我们可以不必处理工作线程上的异常，因为.NET框架会为我们处理。在下面的内容中，我们将会讨论：
+
+-  异步委托
+-  BackgroundWorker
+-  任务并行库
+
+线程池
+------
+
+当我们启动一个线程时，会有几百毫秒的时候花费在组织如刷新私有局部变量栈这样的事情上。每个线程会占用（默认情况下）1M内存。线程池通过共享与重用线程，允许多线程应用非常小的粒度级别上而没有性能损失来减轻这些负担。这在多核心处理器以并行“分治”的风格执行计算代码时将会十分有用。
+
+线程池也会限制其同时运行的线程总数。大多的活动线程会加重操作系统的管理负担同时会使得CPU缓存无效。一旦达到极限，任务就会进行排除，并且只会在一个任务完成时才会启动另一个任务。这使得任意的并行程序成为可能，例如web服务器。
+
+有多种方法可以进入线程池：
+
+-  通过任务并行库或是PLINQ
+-  调用ThreadPool.QueueUserWorkItem
+-  通过异步委托
+-  通过BackgroundWorker
+
+任务并行库（TPL）与PLINQ非常强大，而我们会希望在一个高级层次上使用他们来辅助多线程，即使当线程池化并不重要。我们会在下一章中对其进行详细讨论。现在，我们会简单看一下我们如何使用Task类作为在池化的线程上运行委托的简单方法。
+
+我们可以通过属性来查询我们当前是否运行在池化线程上。
+
+通过TPL进行线程池
+~~~~~~~~~~~~~~~~~
+
+我们可以很容易的使用任务并行库中的Task类来进入线程池。这是由框架4.0引入的：如果我们熟悉旧式的构造，可以将非泛型的Task类看作ThreadPool.QueueUserWorkItem的替换，而泛型的Task看作异步委托的替换。比起旧式的构造，新式的构造会更快速，更方便，并且更灵活。
+
+要使用非泛型的Task类，调用Task.Factory.StartNew，并传递目标方法的委托：
+
+.. code:: csharp
+
+    static void Main()    // The Task class is in System.Threading.Tasks
+    {
+      Task.Factory.StartNew (Go);
+    }
+    static void Go()
+    {
+      Console.WriteLine ("Hello from the thread pool!");
+    }
+
+Task.Factory.StartNew返回一个Task对象，我们可以用来监视任务，例如，我们可以通过调用其Wait方法来等待其结束。
+
+泛型的Task类是非泛型Task的一个子类。他可以使得我们在其完成执行后由任务中返回值。在下面的示例中，我们使用Task来下载一个web页面：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      // Start the task executing:
+      Task<string> task = Task.Factory.StartNew<string>
+        ( () => DownloadString ("http://www.linqpad.net") );
+      // We can do other work here and it will execute in parallel:
+      RunSomeOtherMethod();
+      // When we need the task's return value, we query its Result property:
+      // If it's still executing, the current thread will now block (wait)
+      // until the task finishes:
+      string result = task.Result;
+    }
+    static string DownloadString (string uri)
+    {
+      using (var wc = new System.Net.WebClient())
+        return wc.DownloadString (uri);
+    }
+
+当我们查询任务的Result属性时，未处理的异常会被封装在AggregateException中自动重新抛出。然而，如果我们查询其Result属性失败（并且没有调用Wait），未处理的异常会使得进程结束。
+
+任务并行库具有更多的特性，并且非常适合于多核处理器。我们会在下一章中重新讨论TPL。
+
+无需TPL进入线程池
+~~~~~~~~~~~~~~~~~
+
+如果我们在使用.NET框架4.0以前的版本，我们不能使用任务并行库。相反，我们必须一种老式的构建进入线程池：ThreadPool.QueueUserWorkItem与异步委托。这两者之间的不同在于异步委托可以让我们由线程中返回数据。同时异步委托还可以将异常发送回调用者。
+
+**QueueUserWorkItem**
+
+要使用QueueUserWorkItem，仅需要简单的使用我们希望在池化的线程上运行的委托来调用该方法：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      ThreadPool.QueueUserWorkItem (Go);
+      ThreadPool.QueueUserWorkItem (Go, 123);
+      Console.ReadLine();
+    }
+    static void Go (object data)   // data will be null with the first call.
+    {
+      Console.WriteLine ("Hello from the thread pool! " + data);
+    }
+    // Output:
+    Hello from the thread pool!
+    Hello from the thread pool! 123
+
+我们的目标方法，Go，必须接受一个object参数（来指定WaitCallback委托）。这提供了一种向方法传递数据的合适方式，类似于ParameterizedThreadStart。与Task不同，QueueUserWorkItem并不会返回一个对象来帮助我们在后续管理异常。同时，我们必须在目标代码中显示处理异常－未处理的异常会结束程序。
+
+**异步委托**
+
+ThreadPool.QueueUserWorkItem并没有为在线程结束执行之后由线程中返回值的简单机制。异步委托解决了这一问题，可以允许在两个方向传递任意数量的类型参数。而且，异步委托上的未处理异常可以方便的原线程上重新抛出（更确切的说，调用EndInvoke的线程），所以他们不需要显示处理。
+
+下面是我们如何通过异步委托启动一个工作任务：
+
+#. 实例化一个致力于我们希望并行运行的方法的委托（通常是一个预定义的Func委托）。
+#. 在该委托上调用BeginInvokde，保存其IAsyncResult返回值。BeginInvokde会向调用者立即返回。当池化的线程正在工作时，我们可以执行其他的动作。
+#. 当我们需要结果时，在委托上调用EndInvokde，传递所保存的IAsyncResult对象。
+
+在下面的示例中，我们使用一个异步委托调用在主线程中并行执行，这仅是一个返回字行串长度的简单方法：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Func<string, int> method = Work;
+      IAsyncResult cookie = method.BeginInvoke ("test", null, null);
+      //
+      // ... here's where we can do other work in parallel...
+      //
+      int result = method.EndInvoke (cookie);
+      Console.WriteLine ("String length is: " + result);
+    }
+    static int Work (string s) { return s.Length; }
+
+EndInvoke完成三件事。首先，如果异步委托还没有结束，他会等待异步委托完成执行。其次，他会接收返回值（同时ref或是out参数）。第三，他会向调用线程抛出未处理的异常。
+
+当调用BeginInvokde时我们也可以指定一个回调委托－在完成时会被自动调用的接受IAsyncResult对象的方法。这会使得线程忘记异步委托，但是这需要在回调端做一些其他的工作：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      Func<string, int> method = Work;
+      method.BeginInvoke ("test", Done, method);
+      // ...
+      //
+    }
+    static int Work (string s) { return s.Length; }
+    static void Done (IAsyncResult cookie)
+    {
+      var target = (Func<string, int>) cookie.AsyncState;
+      int result = target.EndInvoke (cookie);
+      Console.WriteLine ("String length is: " + result);
+    }
+
+BeginInvoke的最后一个参数是填充IAsyncResult的AsyncState属性的用户状态对象。他可以包含我们希望的任何事情；在这个示例中，我们向完成回调传递方法委托，从而我们可以其上调用EndInvokde。
+
+优化线程池
+~~~~~~~~~~
+
+线程池初始时其池内有一个线程。随着任务的分配，线程池管理管理所插入的处理额外的并行工作的新线程，直到最大的限制。在足够的非活动周期之后，线程池管理器也主行会收回某些线程。
+
+我们可以通过调用ThreadPool.SetMaxThreads方法来设置线程池可以创建的线程上限；默认如下：
+
+-  在框架4.0 32位环境下为1023
+-  在框架4.0 64位环境下为32768
+-  在框架3.5下每个核心250
+-  在框架2.0下每个核心25
+
+我们也可以通过ThreadPool.SetMinThreads设置下限。下限的角色比较微妙：他是一种高级的优化技术，他可以指示线程池管理器在达到下限之前不要延迟线程的分配。当存在阻塞线程时，提高最小线程计数可以改善程序并发性。
+
+同步
+----
+
+到目前为止，我们已经描述了如何在线程上启动任务、配置线程以及在两个方向上传递数据。同时我们还描述了局部变量对于线程来说如何是私有的，以及引用如何在线程之间共享从而使其通过普通域进行通信。
+
+下一步是同步：为某个可预知的结果组合线程的动作。当线程访问相同的数据时，同步尤其重要。
+
+同步结构可以分为四种类别：
+
+-  简单的阻塞方法
+
+这些方法会等待其他线程结束或是等待一段时间。Sleep，Join与Task.Wait都是简单的阻塞方法。
+
+-  锁结构
+
+这限制了每次可以执行某些动作或是执行代码段的线程数目。排他锁结构是最常见的－每次只允许一个线程，从而可以使得竞争线程访问共同的数据而不会彼此干扰。标准的排他锁结构是lock（Monitor.Enter/Monitor.Exit），Mutex与SpinLock。非排他锁结构是Semaphore，SemaphoreSlim与ReaderWriterLockSlim（我们会本章稍后的内容中讨论读写锁）。
+
+-  信号结构
+
+这可以使得一个线程暂停，直到接收到另一个线程的通知，从而避免低效轮询的需要。有两种经常使用的信号设备：事件等待处理与Monitor的Wait/Pluse方法。框架4.0引入了CountdownEvent与Barrier类。
+
+-  非阻塞同步结构
+
+这些方法通过访问处理器来保护对共同域的访问。CLR与C#提供了下列非阻塞结构：Thread.MemoryBarrier，Thread.VolatileRead，Thread.VolatileWrite，volatile关键字，以及Interlocked类。
+
+让我们简要探讨这些概念。
+
+阻塞
+~~~~
+
+当线程的执行由于某些原因被暂停，例如Sleep或是通过Join与EndInvoke方法等待其他结束的结束时，则称此线程被阻塞。被阻塞的线程会立即让出其处理器时间片，并且从此不再消耗处理器时间，直到阻塞条件被满足。我们可以通过其ThreadState属性来测试一个线程是否被阻塞：
+
+当一个线程被阻塞或是解除阻塞时，操作系统会执行环境切换。这会花费几毫秒的时间。
+
+Blocking Versus Spinning
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+有时一个线程必须被暂停直到满足特定的条件。信号与锁结构通过在条件满足之间阻塞来实现该目的。然而，还有一种更为简单的方法：线程可以通过在一个轮询循环内自旋来等待满足的条件。例如：
+
+while (!proceed);
+
+或者：
+
+while (DateTime.Now < nextStartTime);
+
+通常，这非常浪费处理器的时间：正如CLR与操作系统所关注的，线程正在执行重要的计算，从而获得相应的分配资源。
+
+有时会使用阻塞与自旋锁的组合：
+
+while (!proceed) Thread.Sleep (10);
+
+尽管并不优雅，但是这比仅用自旋锁更高效。然而这也会出现问题，这是由proceed标志上的并行处理所引起的。正确的使用阻塞与信号会避免这些问题。
+
+锁
+--
+
+排他锁用来保证一次只有一个线程进入特定的代码部分。两种主要的排他锁结构是lock与Mutex。在这两者之间，lock结构速度更快且更为方便。然而，Mutex可以使得其锁跨越计算机上不同进程之间中的多个程序。
+
+在本节中，我们将会由lock结构开始，然后探讨Mutex与信号号。在本章的稍后我们会探讨读写锁。
+
+让我们由下面的类开始：
+
+.. code:: csharp
+
+    class ThreadUnsafe
+    {
+      static int _val1 = 1, _val2 = 1;
+      static void Go()
+      {
+        if (_val2 != 0) Console.WriteLine (_val1 / _val2);
+        _val2 = 0;
+      }
+    }
+
+这个类并不是线程安全的：如果Go为两个线程同时调用，则可能会得到一个除零错误，因为在一个线程执行到if语句与Console.WriteLine语句之间时，另一个线程会将\_val2设置为0。
+
+下面显示了lock如何来解决这一问题：
+
+.. code:: csharp
+
+    class ThreadSafe
+    {
+      static readonly object _locker = new object();
+      static int _val1, _val2;
+      static void Go()
+      {
+        lock (_locker)
+        {
+          if (_val2 != 0) Console.WriteLine (_val1 / _val2);
+          _val2 = 0;
+        }
+      }
+    }
+
+每次只有一个线程可以锁定同步对象，并且在锁被释放之前其他的竞争线程会被阻塞。如果有多个线程在竞争锁，他们会在一个“只读队列”中进行排除，并且遵循先到先服务的原则。排他锁有时被称之为强制对锁保护的内容进行顺序访问，因为一个线程的访问不能与另一个线程相重叠。在这个例子中，我们在Go方法内部保护逻辑，也就是\_val1与\_val2域。
+
+等待竞争锁的阻塞线程具有WaitSleepJoin的ThreadState。稍后我们会描述阻塞线程如何通过其他线程进行强制释放。这是一种用于结束线程的重要技术。
+
+Monitor.Enter与Monitor.Exit
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+事实上，C#的lock语句是对具有try/finally块的Monitor.Enter与Monitor.Exit方法调用的语法缩写。下面是在前面示例中的Go方法内部所发生的事情（简化版本）：
+
+.. code:: csharp
+
+    Monitor.Enter (_locker);
+    try
+    {
+      if (_val2 != 0) Console.WriteLine (_val1 / _val2);
+      _val2 = 0;
+    }
+    finally { Monitor.Exit (_locker); }
+
+在同一个对象上没有首先调用Monitor.Enter而调用Monitor.Exit会抛出一个异常。
+
+**lockTaken重载**
+
+我们刚刚所描述的代码是C#1.0、2.0与3.0在翻译lock语句时所引入的代码。
+
+然而上述的代码有一个致命的弱点。假定在Monitor.Enter的实现内部或者在Monitor.Enter调用与try块之间抛出异常的事件。在这样的场景下，锁有可能获得也有可能没有获得。如果获得了锁，则该锁就不会被释放－因为我们永远不会进入try/finally块。这会导致泄漏锁。
+
+为了避免这种危险，CLR4.0的设计者为Monitor.Enter添加了下面的重载：
+
+public static void Enter (object obj, ref bool lockTaken);
+
+如果（当且仅当）Enter方法抛出异常，在此方法之后lockTaken为假，而不会获得锁。
+
+下面是正确的使用模式：
+
+.. code:: csharp
+
+    bool lockTaken = false;
+    try
+    {
+      Monitor.Enter (_locker, ref lockTaken);
+      // Do your stuff...
+    }
+    finally { if (lockTaken) Monitor.Exit (_locker); }
+
+**TryEnter**
+
+Monitor同时提供了一个TryEnter方法，从而允许以毫秒或是TimeSpan的方式指定超时时间。如果获得锁，该方法会返回true，而如果由于方法超时没有获得锁则会返回false。TryEnter也可以以无参数的形式进行调用，这会对锁进行测试，如果不能立即获得锁则会立即超时。
+
+类似于Enter方法，该方法在CLR 4.0中也被重载来接受lockTaken参数。
+
+选择同步对象
+~~~~~~~~~~~~
+
+任何对于参与线程可见的对象都可以用作同步对象，但有一个硬性规定：同步对象必须为引用类型。同步对象通常是私有的（因为有这有助于封装锁逻辑），并且通常是一个实例或是一个静态域。同步对象可以多于他所保护的对象，如下列示例中的\_list域：
+
+.. code:: csharp
+
+    class ThreadSafe
+    {
+      List <string> _list = new List <string>();
+      void Test()
+      {
+        lock (_list)
+        {
+          _list.Add ("Item 1");
+          ...
+
+用于这种锁目的的域（例如前面示例中的\_locker）可以在锁的作用域与粒度上进行精确控制。包含对象（this）或者其类型都可以用作同步对象：
+
+lock (this) { ... }
+
+或是：
+
+lock (typeof (Widget)) { ... } // For protecting access to statics
+
+这种锁方式的缺点在于我们并没有封装锁逻辑，从而较难避免死锁与额外的阻塞。类型上的锁也会在应用域边界之间渗透。
+
+我们也可以在Lambda表达或是匿名方法所捕获的局部变量上加锁。
+
+何时加锁
+~~~~~~~~
+
+作为一条基本原则，我们需要在访问任何可写的共享域时加锁。即使是在最简单的情况－对单个域的赋值操作－我们都必须考虑同步。在下面的类中，Increment与Assign方法都不是线程安全的：
+
+.. code:: csharp
+
+    class ThreadUnsafe
+    {
+      static int _x;
+      static void Increment() { _x++; }
+      static void Assign()    { _x = 123; }
+    }
+
+下面是Increment与Assign的线程安全版本：
+
+.. code:: csharp
+
+    class ThreadSafe
+    {
+      static readonly object _locker = new object();
+      static int _x;
+      static void Increment() { lock (_locker) _x++; }
+      static void Assign()    { lock (_locker) _x = 123; }
+    }
+
+锁与原子性
+~~~~~~~~~~
+
+如果一组变量总是在相同的块内进行读写，我们就可以称这组变量是原子性读写。让我们假定域x与y总是在对象locker上的lock内进行读取与赋值：
+
+lock (locker) { if (x != 0) y /= x; }
+
+我们就可以说x与y是原子性访问的，因为上面的代码块不能为其他的线程分割。如果x与y总是在相同的排他锁中进行访问，我们就不会得到除零错误。
+
+指令原子性则不同，尽管是相似的概念：如果指令不可分割的在底层处理器上运行，则该指令是原子的。
+
+嵌套锁
+~~~~~~
+
+线程可以以嵌套的方式重复锁住相同的对象：
+
+.. code:: csharp
+
+    lock (locker)
+      lock (locker)
+        lock (locker)
+        {
+           // Do something...
+        }
+
+或是：
+
+.. code:: csharp
+
+    Monitor.Enter (locker); Monitor.Enter (locker);  Monitor.Enter (locker);
+    // Do something...
+    Monitor.Exit (locker);  Monitor.Exit (locker);   Monitor.Exit (locker);
+
+在这样的场景中，只有当最外层的lock语句退出时，对象才会被解锁－或是执行了匹配数目的Monitor.Exit语句。
+
+当一个方法在锁中调用另一个方法时，嵌套锁将会十分有用：
+
+.. code:: csharp
+
+    static readonly object _locker = new object();
+    static void Main()
+    {
+      lock (_locker)
+      {
+         AnotherMethod();
+         // We still have the lock - because locks are reentrant.
+      }
+    }
+    static void AnotherMethod()
+    {
+      lock (_locker) { Console.WriteLine ("Another method"); }
+    }
+
+线程只有在第一个锁处阻塞。
+
+死锁
+~~~~
+
+当两个线程彼此等待为另一个线程所占用的资源时会发生死锁，从而任何一个线程都不会执行。演示死锁最简单的方法就是使用两个锁：
+
+.. code:: csharp
+
+    object locker1 = new object();
+    object locker2 = new object();
+     
+    new Thread (() => {
+                        lock (locker1)
+                        {
+                          Thread.Sleep (1000);
+                          lock (locker2);      // Deadlock
+                        }
+                      }).Start();
+    lock (locker2)
+    {
+      Thread.Sleep (1000);
+      lock (locker1);                          // Deadlock
+    }
+
+使用三个或是更多的线程可以创建死锁链。
+
+死锁是多线程中最难的问题之一，特别有多个相关的对象时。基本来说，困难在于我们不能确定我们的调用者已经获得了哪些锁。
+
+所以，我们可能会锁信类x中的私有域a，而并不知道我们的调用者已经锁住了类y中的域b。同时，另一个线程正在执行相反的操作－创建死锁。具有讽刺意味的是，这种问题会由于面向对象的设计模式而加剧，因为这些模式创建了直到运行时才会确定的调用链。
+
+流行的建议，“以相同的顺序锁住对象以避免死锁”，尽管有助于我们开始时的示例，但是很难应用到我们刚才所描述的场景。更好的策略是小心那些在对象中调用会引用我们自射对象的方法。同时考虑我们是否真的需要锁住其他类中的方法调用。更多的依赖于声明与数据并行，不可变类型与非阻塞的同步结构可以减少锁的需要。
+
+另一个死锁的场景出现在我们调用Dispatcher.Invoke（在WPF程序中）或是Control.Invoke（在Windows
+Forms程序中）同时占有一个锁。如果UI恰好要运行等待相同的锁的另一个方法，就会这里发生死锁。这通常可以通过调用BegionInvoke而不是Invoke进行简单的修正。或者，我们可以在调用Invoke之前释放我们的锁，尽管如果我们的调用者占用锁这种方法并不会起作用。
+
+性能
+~~~~
+
+锁速度很快：如果我们的锁不是竞争锁，我们可以期望在2010年代的计算机上以小于100纳秒的时间获得与释放锁。如果是竞争锁，相应的环境切换会接近毫秒级别，尽管这在线程真正被重新调度之前会更长。我们可以稍后章节中所描述的SpinLock类来避免环境切换的代价。
+
+如果我们过多使用，锁会通过使得其他线程进行不必要的等待而降低并行性。同时这也会增加死锁的机会。
+
+Mutex
+~~~~~
+
+Mutex类似于C#的lock，但是他可以跨越多个进程工作。换句话说，Mutex可以是计算域也可以是程序域。
+
+对于Mutex类，我们可以调用WaitOne方法来加锁，调用ReleaseMutex方法来解锁。关闭或是销毁Mutex会自动释放锁。类似于lock语句，Mutex只能由获得该Mutex的相同线程释放。
+
+跨进程Mutex的一个通常应用就是确保一次只能运行一个程序实例。下面演示了这是如何实现的：
+
+.. code:: csharp
+
+    class OneAtATimePlease
+    {
+      static void Main()
+      {
+        // Naming a Mutex makes it available computer-wide. Use a name that's
+        // unique to your company and application (e.g., include your URL).
+        using (var mutex = new Mutex (false, "oreilly.com OneAtATimeDemo"))
+        {
+          // Wait a few seconds if contended, in case another instance
+          // of the program is still in the process of shutting down.
+          if (!mutex.WaitOne (TimeSpan.FromSeconds (3), false))
+          {
+            Console.WriteLine ("Another instance of the app is running. Bye!");
+            return;
+          }
+          RunProgram();
+        }
+      }
+      static void RunProgram()
+      {
+        Console.WriteLine ("Running. Press Enter to exit");
+        Console.ReadLine();
+      }
+    }
+
+Semaphore
+~~~~~~~~~
+
+信号量类似于一个夜总会：他具有一定的容量，并且有保安把守。一旦满员，则不允许其他人进入，并且在外部随队。然后，对于离开的每一个人，则排在队列前头的人可以进入。这种结构需要两个参数：当前夜总会中可用的位置数以及夜总会的总容量。
+
+具有容量的信号量类似于Mutex或lock，所不同的是信号量没有拥有者。任何线程都可以在Semaphore上调用Release，而对于Mutex与lock，只有获得锁的线程可以释放。
+
+信号量在有限制的并行中非常有用－可以阻止过多的线程同时执行特定的代码段。在下面的示例中，五个线程尝试进入一次只允许三个线程进入的夜总会：
+
+.. code:: csharp
+
+    class TheClub      // No door lists!
+    {
+      static SemaphoreSlim _sem = new SemaphoreSlim (3);    // Capacity of 3
+      static void Main()
+      {
+        for (int i = 1; i <= 5; i++) new Thread (Enter).Start (i);
+      }
+      static void Enter (object id)
+      {
+        Console.WriteLine (id + " wants to enter");
+        _sem.Wait();
+        Console.WriteLine (id + " is in!");           // Only three threads
+        Thread.Sleep (1000 * (int) id);               // can be here at
+        Console.WriteLine (id + " is leaving");       // a time.
+        _sem.Release();
+      }
+    }
+    1 wants to enter
+    1 is in!
+    2 wants to enter
+    2 is in!
+    3 wants to enter
+    3 is in!
+    4 wants to enter
+    5 wants to enter
+    1 is leaving
+    4 is in!
+    2 is leaving
+    5 is in!
+
+如果Sleep语句被替换为磁盘IO操作，Seamphore通过限制过多的并行磁盘操作可以改善整体性能。
+
+类似于Mutex，Seamphore也可以跨越多个进程。
+
+线程安全
+--------
+
+如果一个程序或是方法在任意的多线程场景中没有不确定性，则称该线程或方法是线程安全的。线程安全主要是通过锁以及减少线程交互的可能性来实现的。线程安全主要是通过锁与减少线程交互的可能性来实现的。
+
+通用类型很少在其整个生命周期内是线程安全的，原因如下：
+
+-  完全线程安全的开发负担非常繁重，特别是如果一个类型有多个域时
+-  线程安全是导致性能损耗
+-  线程安全的类型并不一定会保证使用该类型的程序线程安全，并且后者所涉及的问题会使得前者变得多余。
+
+所以线程安全通常只会在需要时实现，为了处理特定的多线程场景。
+
+然而，有多种方法来欺骗并使得大而复杂的类在多线程环境中安全运行。一种方法是通过牺牲粒度将大的代码段－甚至访问整个对象－封装在一个排他锁内，从而在高层次上保证序列化访问。事实上，如果我们希望在多线程环境中使用线程不安全的第三方代码时（或绝大多数的框架类型）时，这种策略是十分必要的。这种技巧只是简单的使用相同的排他锁来保护对线程不安全对象上所有属性、方法与域的访问。这种解决方案适用于对象的所有方法都会快速执行（否则会导致大量的阻塞）。
+
+另一种欺骗的方法就是通过减少共享数据来减少线程交互。这是一种优秀的方法并且隐式的用在无状态的中间层程序与web页面服务器中。因为多个客户端请求可以同时到达，所有他们所请求的服务器方法必须是安全的。无状态设计（由于扩展性需求）本质上限制了交互的可能性，因为类并不需要持久化请求之间的数据。然后线程交互仅被限制为我们也许会选择创建的静态域，这种方法就如同在内存中缓存经常用到的数据以及提供如验证这样的基础服务等。
+
+实现线程安全的最后一种策略就是使用自动锁机制。如果我们继承ContextBoundObject并且在类上应用Synchronization属性时.则NET框架所采用的就是这种方法。然后当该对象上的方法或是属性被调用时，一个对象粒度的锁就会自动用于整个方法或是属性的执行。尽管这减少了线程安全的负担，但是他有其自己的问题：死锁、降低并发性以及不可预料的重新进入。正是由于这些原因，手动加锁通常是更好的选择。
+
+线程安全与.NET框架类型
+~~~~~~~~~~~~~~~~~~~~~~
+
+锁可以用来将线程不安全的代码转换为线程安全的代码。这种机制的一个良好应用就是.NET框架：当实例化时，几乎其所有的非基础类型都不是线程安全的，然而如果对指定对象的所有访问都通过锁进行保护，则他们就可以用于多线程代码中。例如，当两个线程同时向相同的List集合中添加对象时，然后枚举列表：
+
+.. code:: csharp
+
+    class ThreadSafe
+    {
+      static List <string> _list = new List <string>();
+      static void Main()
+      {
+        new Thread (AddItem).Start();
+      }
+      static void AddItem()
+      {
+        lock (_list) _list.Add ("Item " + _list.Count);
+        string[] items;
+        lock (_list) items = _list.ToArray();
+        foreach (string s in items) Console.WriteLine (s);
+      }
+    }
+
+在这个示例中，我们在\_list对象本身上加锁。如果我们有两个彼此相关的列表，我们需要依据要加锁的列表选择一个共同的对象（我们可以使用其中一个列表，或者更好的是使用独立的域）。
+
+枚举.NET集合也是线程不安全的，如果在枚举的过程中列表被修改则会抛出异常。在这个示例中，我们并没有将整个枚举过程加锁，而是首先将其中对象拷贝到一个数组中。如果我们在枚举过程中的操作很耗时，这样可以避免过多的持有锁。（另一种解决方案是使用读写锁）
+
+**为线程安全对象加锁**
+
+我们同时需要为访问线程安全的对象加锁。为了进行演示，考虑框架的List类，该类确实是线程安全的，而我们希望向列表中添加一个新对象：
+
+if (!\_list.Contains (newItem)) \_list.Add (newItem);
+
+无论列表是否是线程安全的，上面的语句都不是线程安全的。为了防止关系测试与添加新对象之间的抢占，整个if语句需要封装在一个锁中。然后相同的锁需要用在我们修改列表的所有地方。例如，下面的语句也需要封装在一个相同的锁中：
+
+\_list.Clear();
+
+来确保他不会抢占前面的语句。换句话说，我们需要精确锁住线程非安全的集合类。
+
+**静态方法**
+
+将对对象的访问封装在一个自定义锁中只适用于使用该锁的所有并发线程。如果对象具有更宽的作用域则不适用。最糟糕的情况就是公开类型中的静态方法。例如，假定如果DateTime结构上的静态属性，DateTime.Now，不是线程安全的，则两个并发线程调用会导致垃圾输出或是异常。使用外部锁进行修正的唯一方法就是在调用DateTime.Now之前锁住类型本身-lock(typeof(DateTime))。这仅适用于所有的程序员都同意这样做。而且，锁住类型本身也有其自身的问题。
+
+由于这一原因，DateTime结构的静态成员已经进行了细心的编程使其是线程安全的。这在.NET框架中是一个常见的模式：静态成员是线程安全的；实例成员则不是。遵循这一原则，编写公用的类型而不是创建不可能的线程安全难题也是有道理的。
+
+**只读线程安全**
+
+使得并行只读访问成为类型线程安全是有利的，因为这意味着消费者可以避免排他锁。许多.NET框架类型遵循这一原则：例如，集合对于并行读取者是线程安全的。
+
+我们遵循这一愿则也很简单：如果我们希望一个类型对于并行只读访问是线程安全的，不要在消费者期望是只读的方法内写入域。例如，在集合中实现ToArray()方法中，我们也许会由整理集合的内部结构开始。然而，这会使得其对于期望该方法是只读的消费来说是非线程安全的。
+
+只读线程安全也是枚举器不同于“可枚举”的原因之一：两个线程可以在一个集合上同时进行枚举，因为每一个都会获得单独的枚举器。
+
+应用服务器中的线程安全
+~~~~~~~~~~~~~~~~~~~~~~
+
+应用服务器需要多线程化来处理并行的客户请求。WCF，ASP.NET与Web
+Services应用是隐式多线程的；对于使用网络隧道，如TCP或HTTP的远程服务器应用也是如此。这意味着当在服务器端编写代码时，如果存在处理客户请求的线程之间交互时，我们必须考虑线程安全性。幸运的是，这样的可能性很少出现；一个典型的服务器类或者是无状态的（没有域），或者具有为每个客户或请求创建单独对象实例的激活模式。交互通常只在静态域中出现，有时用于数据库部分的内存缓存以改善性能。
+
+例如，假定我们有一个查询数据库的RetrieveUser方法：
+
+.. code:: csharp
+
+    // User is a custom class with fields for user data
+    internal User RetrieveUser (int id) { ... }
+
+如果这个方法被频繁调用，我们可以通过将结果缓存在一个静态的Dictionary中来改善性能。下面是一个考虑线程安全的解决方案：
+
+.. code:: csharp
+
+    static class UserCache
+    {
+      static Dictionary <int, User> _users = new Dictionary <int, User>();
+      internal static User GetUser (int id)
+      {
+        User u = null;
+        lock (_users)
+          if (_users.TryGetValue (id, out u))
+            return u;
+        u = RetrieveUser (id);           // Method to retrieve from database;
+        lock (_users) _users [id] = u;
+        return u;
+      }
+    }
+
+我们必须至少要在读取与更新字典时加锁来保证线程安全。在这个示例中，我们在加锁的简单与性能之间选择了一个实际的平衡。实际上我们的设计略有一些效率的问题：如果两个线程同时使用之前并未获取的id来调用该方法，RetrieveUser方法就会被调用两次－而字典就会进行不必要的更新。对整个方法加锁会避免这一问题，但是会出现更糟的效率问题：在调用RetrieveUser的期间整个缓存被加锁，在这段时间内，其他的线程会被阻塞。
+
+富客户端应用与线程安全
+~~~~~~~~~~~~~~~~~~~~~~
+
+WPF与Windows
+Forms库都遵循基于线程关系的模型。尽管每一个都具有单独的实现，但是他们在作用原理上非常相似。
+
+构成富客户端的对象主要基于WPF情况下的DependencyObject或是Windows
+Forms情况下的Control。这些对象具有线程关系，这意味着只有实例化这些对象的线程才能在稍后访问其成员。违反这一原则或者会引起不可预料的行为，或者是抛出异常。
+
+好的一面时，这意味着我们在访问UI对象时并不需要加锁。坏的一面则是，如果我们希望调用在线程Y上所创建的对象X的成员，我们必须将请求转换为线程Y。我们通过下列方法显式实现：
+
+-  在WPF中，在元素的Dispatcher对象上调用Invoke或是BeginInvoke。
+-  在Windows Forms中，在控件上调用Invoke或是BeginInvoke。
+
+Invoke与BeginInvoke都接受一个委托，引用我们希望运行的目标控件上的方法。Invoke同步执行：调用者会阻塞，直到转换完成。BeginInvoke异步执行：调用者会立即返回，而转换的请求会进入队列（使用与处理键盘，鼠标与计时器事件相同的消息队列）。
+
+假定我们有一个包含名为txtMessage的文本框，我们希望一个工作线程更新其内容，下面是一个WPF示例：
+
+.. code:: csharp
+
+    public partial class MyWindow : Window
+    {
+      public MyWindow()
+      {
+        InitializeComponent();
+        new Thread (Work).Start();
+      }
+      void Work()
+      {
+        Thread.Sleep (5000);           // Simulate time-consuming task
+        UpdateMessage ("The answer");
+      }
+      void UpdateMessage (string message)
+      {
+        Action action = () => txtMessage.Text = message;
+        Dispatcher.Invoke (action);
+      }
+    }
+
+对于Windows Form代码类似，所不同的是我们调用Form的Invoke方法：
+
+.. code:: csharp
+
+      void UpdateMessage (string message)
+      {
+        Action action = () => txtMessage.Text = message;
+        this.Invoke (action);
+      }
+
+**工作线程与UI线程**
+
+将一个富客户端应用看作有两个不同的线程类型是很有益的：UI线程与工作线程。UI线程实例化UI元素；工作线程则不会。工作线程通常执行常时间任务，如获取数据。
+
+大多数的富客户端应用有一个单独的UI线程并不时产生工作线程－直接产生或是使用BackgroundWorker。为了更新控件或是报告进程，这些工作线程会转换为主UI线程。
+
+那么一个应用何时会有多个UI线程呢？主要的应用场景是当我们有一个具有多个顶级窗口的应用时，通常被称为单文档界面（SDI）程序，例如Microsoft
+Word。每个SDI窗口通常会在任务栏上显示为单独的程序，并且大多数在功能上与其他的SDI窗口相独立。通过为每一个这样的窗口指定一个单独的UI线程，应用可以进行更好的响应。
+
+不可更改的对象
+~~~~~~~~~~~~~~
+
+不可修改的对象其状态不能在外部或内部被修改。不可修改对象内的域通常被声明为只读的，并且是在构造过程中被完全初始化的。
+
+不可修改性是函数式编程的一个特点－与其相对的是可修改的对象，我们可以使用不同的属性创建一个新的对象。LINQ使用这种范式。不可修改性在多线程中也很有价值，因为他通过消除（或是最小化）可写性来避免可写状态的问题。
+
+使用不可修改对象的一个模式是封装一组相关的域来最小化锁的时长。为了使用一个简单的示例，假定我们有如下的两个域：
+
+.. code:: csharp
+
+    int _percentComplete;
+    string _statusMessage;
+
+而我们希望对其进行原子性的读/写。我们并不需要将这些域进行加锁，相反我们可以定义如下的不可修改类：
+
+.. code:: csharp
+
+    class ProgressStatus    // Represents progress of some activity
+    {
+      public readonly int PercentComplete;
+      public readonly string StatusMessage;
+      // This class might have many more fields...
+      public ProgressStatus (int percentComplete, string statusMessage)
+      {
+        PercentComplete = percentComplete;
+        StatusMessage = statusMessage;
+      }
+    }
+
+然后我们可以定义该类型的一个域以及一个锁对象：
+
+.. code:: csharp
+
+    readonly object _statusLocker = new object();
+    ProgressStatus _status;
+
+现在我们可以读取该类型的值而不需要锁定多个单一的赋值：
+
+.. code:: csharp
+
+    var status = new ProgressStatus (50, "Working on it");
+    // Imagine we were assigning many more fields...
+    // ...
+    lock (_statusLocker) _status = status;    // Very brief lock
+
+要读取该对象，我们首先获取该对象的一个拷贝（在锁内）。然后我们可以读取其值而不需要加锁：
+
+.. code:: csharp
+
+    ProgressStatus status;
+    lock (_locker ProgressStatus) status = _status;   // Again, a brief lock
+    int pc = statusCopy.PercentComplete;
+    string msg = statusCopy.StatusMessage;
+
+注意这种无锁的方法避免了一组相关域内的不一致性。但是他并没有避免我们后续操作时的数据修改，因此，我们通常需要锁。在第22章中，我们将会看到使用不可修改性来简化多线程的更多示例，包括PLINQ。
+
+非阻塞同步
+----------
+
+读/写锁
+-------
+
+通常，类型的实例对于并行的读操作是线程安全的，但是对于并行的更新操作则不是线程安全的（对于并行的读取与更新操作也不是线程安全的）。对于如文件这样的资源也是如此。尽管使用一个适用于所有访问模式的简单的排他锁对该类型的实例进行保护是常用到的一个小技巧，如果有多个读取操作而仅有少量的更新操作，则这种限制并发性的技巧并不合理。这种应用场景也许会出现在业务程序服务器上，其中经常用到的数据会被缓存在静态域中以进行快速获取。ReaderWriterLockSlim类被设计用来为此种应用场景提供最大的可用锁。
+
+对于这些类，有两种基本的锁类型－读锁与写锁：
+
+-  写锁通常是排他的
+-  读锁可以与其他的读锁兼容
+
+所以，持有写锁的线程会阻塞尝试获取读锁或写锁的其他线程。但是如果没有线程持有写锁，任意数量的线程可以同时获得读锁。
+
+ReaderWriterLockSlim定义了下面的方法用来获取与释放读/写锁：
+
+.. code:: csharp
+
+    public void EnterReadLock();
+    public void ExitReadLock();
+    public void EnterWriteLock();
+    public void ExitWriteLock();
+
+另外，所有的EnterXXX方法还有一个Try版本来接受Monitor.TryEnter风格的超时参数。ReaderWriterLock提供了类似的方法，名为AcquireXXX与ReleaseXXX。如果超时，这些方法会抛出ApplicationException，而不是返回false。
+
+下列程序演示了ReaderWriterLockSlim。三个线程连续枚举一个列表，而另外两个线程每秒向列表添加一个随机数字。读锁保护列表读取器，而写锁保护列表写入器：
+
+.. code:: csharp
+
+    class SlimDemo
+    {
+      static ReaderWriterLockSlim _rw = new ReaderWriterLockSlim();
+      static List<int> _items = new List<int>();
+      static Random _rand = new Random();
+      static void Main()
+      {
+        new Thread (Read).Start();
+        new Thread (Read).Start();
+        new Thread (Read).Start();
+        new Thread (Write).Start ("A");
+        new Thread (Write).Start ("B");
+      }
+      static void Read()
+      {
+        while (true)
+        {
+          _rw.EnterReadLock();
+          foreach (int i in _items) Thread.Sleep (10);
+          _rw.ExitReadLock();
+        }
+      }
+      static void Write (object threadID)
+      {
+        while (true)
+        {
+          int newNumber = GetRandNum (100);
+          _rw.EnterWriteLock();
+          _items.Add (newNumber);
+          _rw.ExitWriteLock();
+          Console.WriteLine ("Thread " + threadID + " added " + newNumber);
+          Thread.Sleep (100);
+        }
+      }
+      static int GetRandNum (int max) { lock (_rand) return _rand.Next(max); }
+    }
+
+下面为输出结果：
+
+.. code:: text
+
+    Thread B added 61
+    Thread A added 83
+    Thread B added 55
+    Thread A added 33
+    ...
+
+ReaderWriterLockSlim要比一个简单锁允许更多的并发Read活动。我们可以通过在while循环的起始处的Write方法中插入下列代码来演示：
+
+Console.WriteLine (\_rw.CurrentReadCount + " concurrent readers");
+
+这几乎总是输出“3 concurrent
+readers”。除了CurrentReadCount，ReaderWriterLockSlim还提供了下列属性用于监视锁：
+
+.. code:: csharp
+
+    public bool IsReadLockHeld            { get; }
+    public bool IsUpgradeableReadLockHeld { get; }
+    public bool IsWriteLockHeld           { get; }
+    public int  WaitingReadCount          { get; }
+    public int  WaitingUpgradeCount       { get; }
+    public int  WaitingWriteCount         { get; }
+    public int  RecursiveReadCount        { get; }
+    public int  RecursiveUpgradeCount     { get; }
+    public int  RecursiveWriteCount       { get; }
+
+可更新的锁与递归
+~~~~~~~~~~~~~~~~
+
+有时在单一的原子操作中为写锁封装一个读锁是很用的。例如，假定我们只希望在列表中没有某个元素时向列表添加该元素。确实，我们希望最小化在写锁上所花的时间，所以我们可以进行如下处理：
+
+#. 获取一个读锁
+#. 测试某项是否位于列表中，如果存在，释放锁并返回
+#. 释放读锁
+#. 获取一个写锁
+#. 添加该项
+
+问题在于另一个线程也许会在步骤3与4之间插入并修改列表。ReaderWriterLockSlim通过一个名为可更新锁的第三种锁来解决这一问题。可更新的锁类似于读锁，所不同的他可以在稍后的原子操作中提升为写锁。下面是我们的用法：
+
+#. 调用EnterUpgradeableReadLock
+#. 执行读操作
+#. 调用EnterWriteLock（这会将可更新锁转换为写锁）
+#. 执行写操作
+#. 调用ExitWriteLock（这会将写锁转换为读锁）
+#. 执行其他的读操作
+#. 调用ExitUpgradeableReadLock
+
+由调用者的角度来看，这类似于嵌入锁或是递归锁。然而在第3步中，ReaderWriterLockSlim在原子操作中释放了我们的读锁并获取了一个新锁。
+
+在可更新锁与读锁之间还有另一个重要区别。可更新锁可以与任意数量的读锁共存，但是很次只能有一个可更新锁起作用。这可以防止死锁的出现。
+
+我们可以通过修改前面示例中的Write方法从而只在某个元素在列表中不存在时添加该元素来演示可更新锁：
+
+.. code:: csharp
+
+    while (true)
+    {
+      int newNumber = GetRandNum (100);
+      _rw.EnterUpgradeableReadLock();
+      if (!_items.Contains (newNumber))
+      {
+        _rw.EnterWriteLock();
+        _items.Add (newNumber);
+        _rw.ExitWriteLock();
+        Console.WriteLine ("Thread " + threadID + " added " + newNumber);
+      }
+      _rw.ExitUpgradeableReadLock();
+      Thread.Sleep (100);
+    }
+
+**递归加锁**
+
+相应的，嵌入或是递归锁是为ReaderWriterLockSlim所禁止的。所以下面的代码会抛出异常：
+
+.. code:: csharp
+
+    var rw = new ReaderWriterLockSlim();
+    rw.EnterReadLock();
+    rw.EnterReadLock();
+    rw.ExitReadLock();
+    rw.ExitReadLock();
+
+然而如果我们使用下面的代码为构造ReaderWriterLockSlim则不会出现运行错误：
+
+var rw = new ReaderWriterLockSlim
+(LockRecursionPolicy.SupportsRecursion);
+
+这可以保证递归锁只在我们特意的地方出现。递归锁会带来不必要的复杂性，因为很可能他会获取多种类型的锁：
+
+.. code:: csharp
+
+    rw.EnterWriteLock();
+    rw.EnterReadLock();
+    Console.WriteLine (rw.IsReadLockHeld);     // True
+    Console.WriteLine (rw.IsWriteLockHeld);    // True
+    rw.ExitReadLock();
+    rw.ExitWriteLock();
+
+基本原则就是一旦我们获取一个锁，接下来的递归锁应该更弱，而不是更强：
+
+Read Lock→Upgradeable Lock→Write Lock
+
+然而，将可更新锁提升为写锁的请求总是合法的。
+
+计时器
+------
+
+如果我们需要在固定的时间间隔执行某个方法，最简单的方法就是使用计时器。与类似于下面代码所示的技术比起来，在其内存与资源的使用方法，计时器都是方便而高效的：
+
+.. code:: csharp
+
+    new Thread (delegate() {
+                             while (enabled)
+                             {
+                               DoSomeAction();
+                               Thread.Sleep (TimeSpan.FromHours (24));
+                             }
+                           }).Start();
+
+上面的代码不仅会占用线程资源，而且如果没有额外的代码，DoSomeAction会在每天稍后一些的时间发生。计时器可以解决这些问题。
+
+.NET框架提供了四种计时器。其中的两个是通用多线程的计时器：
+
+-  System.Threading.Timer
+-  System.Timers.Timer
+
+其他两个是具有特殊用途的单线程计时器：
+
+-  System.Windows.Forms.Timer（Windows窗体计时器）
+-  System.Windows.Threading.DispatcherTimer（WPF计时器）
+
+多线程计时器更强大，精确与灵活；单线程计时器对于运行更新Windows窗体控件或WPF元素这样的简单任务更为安全和方便。
+
+多线程计时器
+~~~~~~~~~~~~
+
+System.Threading.Timer是最简单的多线程计时器：他只有一个构造函数与两个方法。在下面的示例中，计时器调用Tick方法，他会在五秒之后输出“tick...”，并在其后的每一秒输出，直到用户输入回车：
+
+.. code:: csharp
+
+    using System;
+    using System.Threading;
+    class Program
+    {
+      static void Main()
+      {
+        // First interval = 5000ms; subsequent intervals = 1000ms
+        Timer tmr = new Timer (Tick, "tick...", 5000, 1000);
+        Console.ReadLine();
+        tmr.Dispose();         // This both stops the timer and cleans up.
+      }
+      static void Tick (object data)
+      {
+        // This runs on a pooled thread
+        Console.WriteLine (data);          // Writes "tick..."
+      }
+    }
+
+我们可以在稍后通过调用其Change方法来修改计时器的间隔。如果我们希望计时器仅触发一次，在构造函数中的最后一个参数指定Timeout.Infinite。
+
+.NET框架在System.Timers名字空间中提供了另一个相同名字的计时器。这个计时器仅是简单的封装了System.Threading.Timer，为使用相同的底层引擎时提供了额外的方便。下面是其所添加特性的小结：
+
+-  Component实现，允许其位于Visual Studio设计器中
+-  Interval属性而不是Change方法
+-  Elapsed事件而不是回调委托
+-  Enabled属性来启动或停止计时器（默认值为false）
+-  避免与Enabled相混淆的Start与Stop方法
+-  表明重复事件的AutoReset标记（默认值为true）
+-  用于在WPF元素与Windows窗体控件上使用Invoke与BeginInvoke调用的SynchronizingObject属性
+
+下面是一个使用示例：
+
+.. code:: csharp
+
+    using System;
+    using System.Timers;   // Timers namespace rather than Threading
+    class SystemTimer
+    {
+      static void Main()
+      {
+        Timer tmr = new Timer();       // Doesn't require any args
+        tmr.Interval = 500;
+        tmr.Elapsed += tmr_Elapsed;    // Uses an event instead of a delegate
+        tmr.Start();                   // Start the timer
+        Console.ReadLine();
+        tmr.Stop();                    // Stop the timer
+        Console.ReadLine();
+        tmr.Start();                   // Restart the timer
+        Console.ReadLine();
+        tmr.Dispose();                 // Permanently stop the timer
+      }
+      static void tmr_Elapsed (object sender, EventArgs e)
+      {
+        Console.WriteLine ("Tick");
+      }
+    }
+
+多线程计时器使用线程池来允许少量线程承担多个计时器的任务。这意味着每次回调方法或Tick事件也许会在不同的线程上触发。而且，Tick总时及时触发－无论前一个Tick是否已经完成执行。所以，回调或是事件处理器必须是线程安全的。
+
+多线程计时器的精度依赖于操作系统，而且通常位于10－20ms区域。如果我们需要更高的精度，我们可以使用本地交互并调用Windows多媒体计时器。这可以达到1ms的精度并且定义在winmm.dll中。首先调用timeBeginPeriod来通知操作系统我们需要较高的计时精度，然后调用timeSetEvent来启动一个多媒体计时器。当我们完成时，调用timeKillEvent来停止计时器与timeEndPeriod来通知操作系统我们不再需要更高的计时精度。第25章演示使用P/Invoke来调用外部方法。我们可以通过搜索关键字dllimport
+winmm.dll timesetevent来查找关于使用多媒体计时器更为完整的例子。
+
+单线程计时器
+~~~~~~~~~~~~
+
+.NET框架提供了为解决WPF与Windows窗体程序的线程安全问题而设计的计时器：
+
+-  System.Windows.Threading.DispatcherTimer(WPF)
+-  System.Windows.Forms.Timer(Windows Forms)
+
+这两个计时器在其所提供的成员（Interval，Tick，Start与Stop）以及使用方式的类似上与System.Timers.Timer非常像。然而，其内部工作原则是完全不同的。WPF与Windows
+Forms计时器器并不使用线程池来生成计时器事件，而是依赖其底层用户界面模型的消息机制。这意味着Tick事件总是在与创建计时器相同的线程上触发－在通常程序中，是与用来管理所有用户界面元素与控件的线程相同的线程。这有下列优点：
+
+-  我们可以忘记线程安全性
+-  在前面一个Tick完成处理之前不会触发新的Tick事件
+-  我们可以直接由Tick事件处理代码中更新用户界面元素与控制，而无需调用Control.Invoke与Dispatcher.Invoke。
+
+在我们意识到使用这些计时器的程序并不是真正的多线程程序之前－并没有并行执行，这听起来似乎不错。一个线程为所有的线程提供服务－同时处理UI事件。这会为我们带来单线程计时器的缺点：
+
+-  除非Tick事件处理器快速执行完毕，否则用户界面会没有响应。
+
+这使得WPF与Windows
+Forms计时器仅适用于较小的工作，通常仅适用于更新用户界面的某些方面。否则，我们就需要一个多线程计时器。
+
+在精度方面，单线程计时器类似于多线程计时器（几十毫秒），尽管这两个计时器精度更低，因为他们可以被其他的用户界面请求处理所延迟。
+

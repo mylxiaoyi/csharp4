@@ -1,0 +1,944 @@
+Chapter 8. LINQ Queries
+=======================
+
+LINQ，或者语言结合查询，是用于在本地对象集合或是远程数据源上结构化类型安全查询的语言与框架特性集合。LINQ是在C#
+3.0与框架3.5中引入的。
+
+LINQ使得我们可以查询任意实现了IEnumerable的集合，无论数组，列表或是XML
+DOM，以及远程数据源，例如SQL服务中的表。LINQ同时提供了编译时类型检测与动态查询组合的优点。
+
+本章描述了LINQ体系结构以及编写查询的基础。所有的核心类型定义在System.Linq与System.Linq.Expressions名字空间中。
+
+开始
+----
+
+LINQ中数据的基本单元是序列（sequence）与元素(element）。一个序列是实现了IEnumerable的任意对象，而元素是序列中的每一项。在下面的示例中，names是序列，而Tom，Dick与Harry是元素：
+
+string[] names = { "Tom", "Dick", "Harry" };
+
+我们将其称之为本地序列，因为他表示位于内存中的一个本地对象集合。
+
+查询操作符是转换序列的一个方法。一个通常的查询操作符接受一个输入序列并输出一个转换的输出序列。在System.Linq中的Enumerable类中，有大约40个查询操作符－所有的都被实现为静态扩展方法。这些被称为标准查询操作符。
+
+查询是使用查询操作符转换序列的表达式。最简单的查询由一个输入序列也一个操作符组成。例如，我们可以在一个简单的数组上应用Where操作符来获取长度至少为4个字符的字符串，如下所示：
+
+.. code:: csharp
+
+    string[] names = { "Tom", "Dick", "Harry" };
+    IEnumerable<string> filteredNames = System.Linq.Enumerable.Where
+                                        (names, n => n.Length >= 4);
+    foreach (string n in filteredNames)
+      Console.WriteLine (n);
+    Dick
+    Harry
+
+因为标准查询操作符被实现为扩展方法，我们可以直接在names上调用Where，尽管他是一个实例方法：
+
+IEnumerable filteredNames = names.Where (n => n.Length >= 4);
+
+为了使其通过编译，我们必须引入System.Linq名字空间。下面是完整的示例：
+
+.. code:: csharp
+
+    using System;
+    usign System.Collections.Generic;
+    using System.Linq;
+    class LinqDemo
+    {
+      static void Main()
+      {
+        string[] names = { "Tom", "Dick", "Harry" };
+        IEnumerable<string> filteredNames = names.Where (n => n.Length >= 4);
+        foreach (string name in filteredNames) Console.WriteLine (name);
+      }
+    }
+    Dick
+    Harry
+
+大多数的查询操作符接受一个Lambda表达式作为参数。在我们的示例中，Lambda表达式如下：
+
+.. code:: csharp
+
+    n => n.Length >= 4
+
+输入参数与一个输入元素相对应的。在这种情况下，输入参数n表示数组中的每一个name，并且为string类型。Where操作符要求Lambda表达式返回bool值，如果为true，表示元素应包含在输出序列中。下面是其签名：
+
+.. code:: csharp
+
+    public static IEnumerable<TSource> Where<TSource>
+      (this IEnumerable<TSource> source, Func<TSource,bool> predicate)
+
+下面的查询获取所有包含字母a的name：
+
+.. code:: csharp
+
+    IEnumerable<string> filteredNames = names.Where (n => n.Contains ("a"));
+    foreach (string name in filteredNames)
+      Console.WriteLine (name);             // Harry
+
+至目前为止我们使用扩展方法以及Lambda表达式构建查询。正如我们将会看到的，这种策略是高度可组合的，因为他允许查询操作符链。在本书中，我们将其称之为fluent语法。C#同时提供了编写查询的另一种语法，称之为查询表达式语法。下面使用查询表达式重新实现我们前面的例子：
+
+.. code:: csharp
+
+    IEnumerable<string> filteredNames = from n in names
+                                        where n.Contains ("a")
+                                        select n;
+
+fluent语法与查询语法是互补的。在下面的两节中，我们会详细探讨每一种方法。
+
+Fluent语法
+----------
+
+Fluent语法是最灵活与基础的。在本节中，我们描述如何链接查询操作符来执行更为复杂的查询－并且显示为什么扩展方法对于这一过程如此重要。同时我们还会描述如何格式化用于查询的Lambda表达式并且介绍一些新的查询操作符。
+
+链接查询操作符
+~~~~~~~~~~~~~~
+
+在前面的章节中，我们显示了两个简单查询，每一个由单一的查询操作符组成。为了构建更为复杂的查询，我们向表达式添加额外的查询操作符，从而构成一个链。为了演示，下面的查询获取所有包含字符a的字符，按其长度排序，然后将结果转换为大写：
+
+.. code:: csharp
+
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    class LinqDemo
+    {
+      static void Main()
+      {
+        string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+        IEnumerable<string> query = names
+          .Where   (n => n.Contains ("a"))
+          .OrderBy (n => n.Length)
+          .Select  (n => n.ToUpper());
+        foreach (string name in query) Console.WriteLine (name);
+      }
+    }
+    JAY
+    MARY
+    HARRY
+
+Where，OrderBy与Select是Enumerable类中解析扩展方法的标准查询操作符。
+
+我们已经介绍了Where操作符，他会输出一个输入序列的过滤版本。OrderBy操作符输出输入序列的一个排序版本；Select方法输出一个序列，其中每一个输入元素被转换或是使用指定的Lambda表达式进行计算（在本例中是n.ToUpper()）。操作符链中的数据流是由左向右流动，所以数据首先被过滤，然后排序，然后计算。
+
+下面是这些扩展方法的签名：
+
+.. code:: csharp
+
+    public static IEnumerable<TSource> Where<TSource>
+      (this IEnumerable<TSource> source, Func<TSource,bool> predicate)
+    public static IEnumerable<TSource> OrderBy<TSource,TKey>
+      (this IEnumerable<TSource> source, Func<TSource,TKey> keySelector)
+    public static IEnumerable<TResult> Select<TSource,TResult>
+      (this IEnumerable<TSource> source, Func<TSource,TResult> selector)
+
+当查询操作符像本例这样链接在一起时，一个操作符的输出序列是另一个操作符的输入序列。最终的结果形成了一个生产线，如图8-1所示：
+
+.. figure:: csharp_8_1.png
+   :alt: csharp_8_1.png
+
+   csharp\_8\_1.png
+我们可以分步构建相同的查询，如下所示：
+
+.. code:: csharp
+
+    // You must import the System.Linq namespace for this to compile:
+    IEnumerable<string> filtered   = names   .Where   (n => n.Contains ("a"));
+    IEnumerable<string> sorted     = filtered.OrderBy (n => n.Length);
+    IEnumerable<string> finalQuery = sorted  .Select  (n => n.ToUpper());
+
+finalQuery与我们前面所构建的query完全相同。而且，每一个中间步骤由一个我们可以执行的正确查询组成：
+
+.. code:: csharp
+
+    foreach (string name in filtered)
+      Console.Write (name + "|");        // Harry|Mary|Jay|
+    Console.WriteLine();
+    foreach (string name in sorted)
+      Console.Write (name + "|");        // Jay|Mary|Harry|
+    Console.WriteLine();
+    foreach (string name in finalQuery)
+      Console.Write (name + "|");        // JAY|MARY|HARRY|
+
+**为什么扩展方法重要**
+
+除了使用扩展语法方法以外，我们可以使用传统的静态方法语法来调用查询操作符。例如：
+
+.. code:: csharp
+
+    IEnumerable<string> filtered = Enumerable.Where (names,
+                                                     n => n.Contains ("a"));
+    IEnumerable<string> sorted = Enumerable.OrderBy (filtered, n => n.Length);
+    IEnumerable<string> finalQuery = Enumerable.Select (sorted,
+                                                        n => n.ToUpper());
+
+实际上这是编译器转换扩展方法调用的方式。然而如果我们希望像前面那样使用一条语句编写查询时，避免扩展方法会带来性能开销。让我们重新审视单语句查询－首先使用扩展方法语法：
+
+.. code:: csharp
+
+    IEnumerable<string> query = names.Where   (n => n.Contains ("a"))
+                                     .OrderBy (n => n.Length)
+                                     .Select  (n => n.ToUpper());
+
+其自然线性形式反应了由左到右的数据流，并且将Lambda表达式与其查询操作符关联在一起。如果不使用扩展方法，查询就会丢失其灵活性：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      Enumerable.Select (
+        Enumerable.OrderBy (
+          Enumerable.Where (
+            names, n => n.Contains ("a")
+          ), n => n.Length
+        ), n => n.ToUpper()
+      );
+
+组合Lambda表达式
+~~~~~~~~~~~~~~~~
+
+在前面的示例中，我们向Where操作提供了下列的Lambda表达式：
+
+n => n.Contains ("a") // Input type=string, return type=bool.
+
+Lambda表达式的目的依赖于特定的查询操作符。对于Where操作符，他表明了一个元素是否应被包含在输出序列中。在OrderBy操作符的例子中，Lambda表达式将输入序列中的每一个元素映射到其有序键。对于Select操作符，Lambda表达确定了在提供给输出序列之前输入序列的每一个元素应进行怎样的转换。
+
+查询操作符依据我们的需要计算Lambda表达式－通常是为输入序列中的每一个元素计算一次。Lambda表达式允许我们向查询操作符提供我们自己的逻辑。这使得查询操作符十分灵活－同时又保持了简单。下面是Enumerable.Where的完整实现：
+
+.. code:: csharp
+
+    public static IEnumerable<TSource> Where<TSource>
+      (this IEnumerable<TSource> source, Func<TSource,bool> predicate)
+    {
+      foreach (TSource element in source)
+        if (predicate (element))
+          yield return element;
+    }
+
+**Lambda表达式与Func签名**
+
+标签查询操作符利用泛型Func委托。Func是定义在System.Linq中的通用目的泛型委托族，定义了下列意图：
+
+Func中的类型参数所出现的顺序与他们在Lambda表达式中出现的顺序相同。
+
+所以，Func匹配TSource=>bool
+Lambda表达式：接受TSource参数并且返回bool值。
+
+类似的，Func匹配TSource=>TResult Lambda表达式。
+
+**Lambda表达式与元素类型**
+
+标准查询操作符使用下列的泛型类型名字：
+
++--------------+-------------------------------------------+
+| 泛型类型名   | 含义                                      |
++--------------+-------------------------------------------+
+| TSource      | 输入序列的元素类型                        |
++--------------+-------------------------------------------+
+| TResult      | 输出序列的元素类型－如果不同于TSource     |
++--------------+-------------------------------------------+
+| TKey         | 排序，组合或是联合中所用的key的元素类型   |
++--------------+-------------------------------------------+
+
+TSource由输入序列确定。TResult与TKey由我们的Lambda表达式推测得出。
+
+例如，考虑Select查询操作符的签名：
+
+.. code:: csharp
+
+    public static IEnumerable<TResult> Select<TSource,TResult>
+      (this IEnumerable<TSource> source, Func<TSource,TResult> selector)
+
+Func匹配TSource=>TResult
+Lambda表达式：将输入元素映射到输出元素。TSource与TResult是不同的类型，所以Lambda表达式可以修改每一个元素的类型。而且，Lambda表达式确定了输入序列类型。下面的查询使用Select将字符串类型元素转换为整数类型元素：
+
+.. code:: csharp
+
+    string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+    IEnumerable<int> query = names.Select (n => n.Length);
+    foreach (int length in query)
+      Console.Write (length + "|");    // 3|4|5|4|3|
+
+编译器由Lambda表达式的返回值推测TResult的类型。在这种情况下，TResult被推测为int类型。
+
+Where查询操作符更为简单，并且不需要为输出推测类型，因为输入与输出元素是相同的类型。这是有道理的，因为操作仅过滤元素而不进行转换：
+
+.. code:: csharp
+
+    public static IEnumerable<TSource> Where<TSource>
+      (this IEnumerable<TSource> source, Func<TSource,bool> predicate)
+
+最后，考虑OrderBy操作符的签名：
+
+.. code:: csharp
+
+    // Slightly simplified:
+    public static IEnumerable<TSource> OrderBy<TSource,TKey>
+      (this IEnumerable<TSource> source, Func<TSource,TKey> keySelector)
+
+Func将输入元素映射到有序键。TKey由我们的Lambda表达式推测得出并且独立于输入与输出元素类型。例如，我们可以选择通过长度（int键）或是字符（string键）来排序名字列表：
+
+.. code:: csharp
+
+    string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+    IEnumerable<string> sortedByLength, sortedAlphabetically;
+    sortedByLength       = names.OrderBy (n => n.Length);   // int key
+    sortedAlphabetically = names.OrderBy (n => n);          // string key
+
+自然顺序
+~~~~~~~~
+
+在LINQ中，输入序列的原始顺序是十分重要的。一些查询操作符依据这种行为，例如Take，Skip与Reverse。
+
+Take操作符输出前x个元素，舍弃其他的元素：
+
+.. code:: csharp
+
+    int[] numbers  = { 10, 9, 8, 7, 6 };
+    IEnumerable<int> firstThree = numbers.Take (3);     // { 10, 9, 8 }
+
+Skip操作符忽略前x个元素并输出其余的元素：
+
+IEnumerable lastTwo = numbers.Skip (3); // { 7, 6 }
+
+Reverse执行其所表述的操作：
+
+IEnumerable reversed = numbers.Reverse(); // { 6, 7, 8, 9, 10 }
+
+如Where与Select这样的操作符会保留输入序列的原始顺序。LINQ会在可能时保留输入序列中元素的顺序。
+
+其他操作符
+~~~~~~~~~~
+
+并不是所有的查询操作符都返回一个序列。元素操作符由输入序列中获取一个元素；例如First，Last与ElementAt：
+
+.. code:: csharp
+
+    int[] numbers    = { 10, 9, 8, 7, 6 };
+    int firstNumber  = numbers.First();                     // 10
+    int lastNumber   = numbers.Last();                      // 6
+    int secondNumber = numbers.ElementAt(1);                // 9
+    int lowestNumber = numbers.OrderBy (n => n).First();    // 6
+
+聚合操作符（aggregation）返回一个标题值；通常是数值类型：
+
+.. code:: csharp
+
+    int count = numbers.Count();          // 5;
+    int min = numbers.Min();              // 6;
+
+quantifiers返回一个bool值：
+
+.. code:: csharp
+
+    bool hasTheNumberNine = numbers.Contains (9);          // true
+    bool hasMoreThanZeroElements = numbers.Any();          // true
+    bool hasAnOddElement = numbers.Any (n => n % 2 == 1);  // true
+
+因为这些操作符并不返回集合，我们并不能在这些结果上调用其他的查询操作符。换句话说，他们必须作为查询中的最后一个操作符出现。
+
+有些查询操作符接受两个输入序列。例如Concat，他会将一个序列添加到另一个序列，以及Union，他会执行相同的操作，但是删除重复的元素：
+
+.. code:: csharp
+
+    int[] seq1 = { 1, 2, 3 };
+    int[] seq2 = { 3, 4, 5 };
+    IEnumerable<int> concat = seq1.Concat (seq2);    //  { 1, 2, 3, 3, 4, 5 }
+    IEnumerable<int> union  = seq1.Union (seq2);     //  { 1, 2, 3, 4, 5 }
+
+查询表达式
+----------
+
+C#提供了一个用于编写LINQ查询的语法糖，称之为查询表达式。与通常的思想相对应的，查询表达式并不是基于SQL，而是基于函数式程序语言，例如LISP与Haskell中的列表概念。
+
+在前面的内容中，我们编写了一个fluent语法查询来获取包含字符a的字符串，按其长度排序并且转换为大写。下面是使用查询语法的相同操作：
+
+.. code:: csharp
+
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    class LinqDemo
+    {
+      static void Main()
+      {
+        string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+        IEnumerable<string> query =
+          from    n in names
+          where   n.Contains ("a")     // Filter elements
+          orderby n.Length             // Sort elements
+          select  n.ToUpper();         // Translate each element (project)
+        foreach (string name in query) Console.WriteLine (name);
+      }
+    }
+    JAY
+    MARY
+    HARRY
+
+查询表达式总是由from子句开始，并以select或是group子句结束。from子句声明了一个范围变量（range
+variable）（在本例中为n），我们可以将其看作在输入序列中遍历－类似于foreach。图8-2显示了复杂的语法路线图。
+
+.. figure:: chsarp_8_2.png
+   :alt: chsarp_8_2.png
+
+   chsarp\_8\_2.png
+编译器通过将其转换为fluent语法来处理查询表达式。他以一种非常机械的方式来实现－类似于将foreach语句转换调用GetEnumerator与MoveNext。这就意味着我们使用查询语法编写的任何内容同样也可以使用fluent语法来编写。编译器（初始时）将我们的示例查询转换下面代码：
+
+.. code:: csharp
+
+    IEnumerable<string> query = names.Where   (n => n.Contains ("a"))
+                                     .OrderBy (n => n.Length)
+                                     .Select  (n => n.ToUpper());
+
+Where，OrderBy与Select操作符会使用以fluent语法编写查询时所适用的相同规则。在这种情况下，他们绑定到Enumerable类中的扩展方法，因为System.Linq名字空间已经被引入并且names实现了IEnumerable。然而，当转换查询表达式时，编译器并不是特别喜欢Enumerable类。我们可以想像，编译器机械的将单词Where，OrderBy与Select插入到语句中，然后进行编译，就如同我们自己输入方法名一样。这在他们解析的方式上提供了灵活性。例如，我们在稍后内容编写的数据库查询中的操作符将会绑定到Queryable中的扩展方法。
+
+Range Variables
+~~~~~~~~~~~~~~~
+
+紧随在from关键字之后的标识符被称之为范围变量。范围变量指向当前序列中在其上执行操作的当前元素。
+
+在我们的示例中，范围变量n出现在查询中的每一个子句中。而且，对于每一个子句，变量实际上在不同的序列上遍历：
+
+.. code:: csharp
+
+    from    n in names           // n is our range variable
+    where   n.Contains ("a")     // n = directly from the array
+    orderby n.Length             // n = subsequent to being filtered
+    select  n.ToUpper()          // n = subsequent to being sorted
+
+当我们检测编译到fluent语法的机械式转换时就会变得更为清楚：
+
+.. code:: csharp
+
+    names.Where   (n => n.Contains ("a"))      // Privately scoped n
+         .OrderBy (n => n.Length)              // Privately scoped n
+         .Select  (n => n.ToUpper())           // Privately scoped n
+
+正如我们所看到的，每一个n的实例的作用范围被局限在其自己的Lambda表达式之内。
+
+查询表达式允许我们通过下列子句引入新的范围变量：
+
+-  let
+-  into
+-  额外的from子句
+
+查询语法与SQL语法
+~~~~~~~~~~~~~~~~~
+
+查询语法看上去很像SQL，然而两者是不同的。LINQ查询向下转换为C#表达式，因而遵循标准的C#规则。例如，对于LINQ，我们不能在变量声明之前使用变量。在SQL，我们可以在FROM子句中定义表别名之前在SELECT子句中使用表的别名。
+
+LINQ中的子查只是另一个C#表达式，从而不需要特殊的语法。SQL中的子查询需要特殊的规则。
+
+对于LINQ，在查询中，数据在逻辑上由左向右流动。对于SQL，
+考虑到数据流，顺序缺少良好的结构。
+
+LINQ查询由接受与输出有序序列的传送带或是管道组成。SQL查询由几乎适用于无序集合的网络子句组成。
+
+查询语法与Fluent语法
+~~~~~~~~~~~~~~~~~~~~
+
+查询语法与Fluent语法各有优点。
+
+当查询涉及到下列情况下，查询语法更为简单：
+
+-  用于在范围变量旁边引入新变量的let语句
+-  为一个变层范围变量引用跟随的SelectMany，Join或是GroupJoin
+
+中间层是涉及到Where，OrderBy与Select简单使用的查询。每一个语法都可以工作得很好；选择很大程度上是各人的喜好。
+
+对于由单个操作符所构成的查询，Fluent语法更为简短。
+
+最后，有许多在查询语法中没有关键字的操作符。这些要求我们使用Fluent语法－至少部分上如此。这意味着在下列操作符之外：
+
+.. code:: csharp
+
+    Where, Select, SelectMany
+    OrderBy, ThenBy, OrderByDescending, ThenByDescending
+    GroupBy, Join, GroupJoin
+
+混合语法查询
+~~~~~~~~~~~~
+
+如果一个查询操作符没有查询语法的支持，我们可以混合查询语法与Fluent语法。唯一的限制就是每一个查询语法组件必须是完整的。
+
+假定下面的数据声明：
+
+string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+
+下面的代示例会计算包含字符“a”的名字的个数：
+
+.. code:: csharp
+
+    int matches = (from n in names where n.Contains ("a") select n).Count();
+    // 3
+
+下面的查询会获取以字母顺序中的第一个名字：
+
+string first = (from n in names orderby n select n).First(); // Dick
+
+混合语法方法在某些情况下更适合于复杂的查询。然而，对于这个简单的示例，我们也可以使用Fluent语法：
+
+.. code:: csharp
+
+    int matches = names.Where (n => n.Contains ("a")).Count();   // 3
+    string first = names.OrderBy (n => n).First();               // Dick
+
+本章的其余部分将会显示Fluent语法与查询语法中的关键概念。
+
+延迟执行
+--------
+
+大多数查询操作符的一个重要特性就是查询并不是在构建时立即执行，而是当枚举时执行（换句话说，当在枚举器上调用MoveNext时执行）。考虑下面的查询：
+
+.. code:: csharp
+
+    var numbers = new List<int>();
+    numbers.Add (1);
+    IEnumerable<int> query = numbers.Select (n => n * 10);    // Build query
+    numbers.Add (2);                    // Sneak in an extra element
+    foreach (int n in query)
+      Console.Write (n + "|");          // 10|20|
+
+我们在构建查询之后插入到列表中的额外数字也会包含在结果中，因为直到foreach语句运行时，过滤或是排序查询操作才会执行。这被称之为延迟（deffered或lazy）执行。所有的标准查询操作符都提供延迟执行，但是下列例外：
+
+-  返回单个元素或是标题值的操作符，例如First或Count
+-  下列的转换操作符：ToArray，ToList，ToDictionary，ToLookup
+
+这些操作符会导致立即的查询执行，因为他们的结果类型并没有提供延迟执行的机制。例如，Count方法返回一个简单的整数，因而不能进行枚举。下面的查询是立即执行的：
+
+.. code:: csharp
+
+    int matches = numbers.Where (n => n < 2).Count();    // 1
+
+延迟执行是很重要的，因为他将查询构建与查询执行相分离。这可以使得我们通过多个步骤构建查询，并且使得数据库查询成为可能。
+
+重新计算
+~~~~~~~~
+
+延迟执行还有另一个影响：延迟执行会在重新枚举时重新计算：
+
+.. code:: csharp
+
+    var numbers = new List<int>() { 1, 2 };
+    IEnumerable<int> query = numbers.Select (n => n * 10);
+    foreach (int n in query) Console.Write (n + "|");   // 10|20|
+    numbers.Clear();
+    foreach (int n in query) Console.Write (n + "|");   // <nothing>
+
+下列一些原因解释了为什么有时重新计算是有缺点的：
+
+-  有时我们希望在某一个时间点上“冻住”或是缓存结果
+-  有时查询的计算开稍很大（或是查询远程数据库），所以我们不希望进行没有必要的重复
+
+我们可以通过调用转换操作符，例如ToArray或是ToList来禁止重新计算。ToArray将查询的结果拷贝到一个数组；ToList拷贝到一个泛型List<>中：
+
+.. code:: csharp
+
+    var numbers = new List<int>() { 1, 2 };
+    List<int> timesTen = numbers
+      .Select (n => n * 10)
+      .ToList();                // Executes immediately into a List<int>
+    numbers.Clear();
+    Console.WriteLine (timesTen.Count);      // Still 2
+
+捕获变量
+~~~~~~~~
+
+延迟执行还有另一个副作用。如果我们查询的Lambda表达式引用局部变量，这些变量就具有捕获变量的语义。这就意味着如果我们稍后修改变量的值，查询也会发生变化：
+
+.. code:: csharp
+
+    int[] numbers = { 1, 2 };
+    int factor = 10;
+    IEnumerable<int> query = numbers.Select (n => n * factor);
+    factor = 20;
+    foreach (int n in query) Console.Write (n + "|");   // 20|40|
+
+当在一个foreach循环中构建查询时，这会是一个陷井。例如，假定我们要由字符串移除所有的元音。下面的代码尽管效率很低，但是会给出正确的结果：
+
+.. code:: csharp
+
+    query = query.Where (c => c != 'a');
+    query = query.Where (c => c != 'e');
+    query = query.Where (c => c != 'i');
+    query = query.Where (c => c != 'o');
+    query = query.Where (c => c != 'u');
+    foreach (char c in query) Console.Write (c);  // Nt wht y mght xpct
+
+现在观察一下当我们使用foreach循环重构时会发生什么：
+
+.. code:: csharp
+
+    IEnumerable<char> query = "Not what you might expect";
+    foreach (char vowel in "aeiou")
+      query = query.Where (c => c != vowel);
+    foreach (char c in query) Console.Write (c);   // Not what yo might expect
+
+只有'u'被去掉了！正如我们在第4章所了解到的，这是因为，编译器会将foreach循环中的迭代变量的作用域看作如同在循环之外声明的一样：
+
+.. code:: csharp
+
+    IEnumerable<char> vowels = "aeiou";
+    using (IEnumerator<char> rator = vowels.GetEnumerator())
+    {
+      char vowel;
+      while (rator.MoveNext())
+      {
+        vowel = rator.Current;
+        query = query.Where (c => c != vowel);
+      }
+    }
+
+因为vowel是在循环之外声明的，相同的变量会被重复更新，所以每一个Lambda表达式会捕获相同的vowel。当我们稍后枚举查询时，所有的Lambda表达式会引用变量的当前值，也就是u。为了解决这一问题，我们必须将循环变量赋值给在语句块中声明的另一个变量：
+
+.. code:: csharp
+
+    foreach (char vowel in "aeiou")
+    {
+     char temp = vowel;
+     query = query.Where (c => c != temp);
+    }
+
+这会强制在每次循环迭代时使用新变量。
+
+延迟执行如何工作
+~~~~~~~~~~~~~~~~
+
+查询操作符是通过返回装饰器序列来提供延迟执行的。
+
+与传统的集合类例如数据或是链表不同，装饰器序列并没有其自己的后端结构来存储元素。相反，他封装我们在运行时所提供的另一个序列，从而维护一个持久的依赖。当我们由装饰器请求数据时，他必须依次向所封装的输入序列请求数据。
+
+调用Where仅是构建了一个装饰器包装器序列，存储到输入序列的引用，Lambda表达式，以及所提供的其他参数。只有当装饰器被枚举时输入序列才会被枚举。
+
+图8-3显示了下列查询的组成：
+
+IEnumerable lessThanTen = new int[] { 5, 12, 3 }.Where (n => n < 10);
+
+.. figure:: csharp_8_3.png
+   :alt: csharp_8_3.png
+
+   csharp\_8\_3.png
+当我们枚举lessThanTen时，事实上我们是通过Where装饰器来查询数组。
+
+好消息就是，如果我们希望编写我们自己的查询操作符，使用C#迭代器实现一个装饰器序列是很容易的。下面是显示我们如何编写我们自己的Select方法：
+
+.. code:: csharp
+
+    public static IEnumerable<TResult> Select<TSource,TResult>
+      (this IEnumerable<TSource> source, Func<TSource,TResult> selector)
+    {
+      foreach (TSource element in source)
+        yield return selector (element);
+    }
+
+这个方法是利用yield
+return语句的一个迭代器。在功能上，他是下列代码的简写：
+
+.. code:: csharp
+
+    public static IEnumerable<TResult> Select<TSource,TResult>
+      (this IEnumerable<TSource> source, Func<TSource,TResult> selector)
+    {
+      return new SelectSequence (source, selector);
+    }
+
+其中SelectSequence是一个类，其枚举器在迭代方法中封装了逻辑。
+
+所以，当我们调用操作符，例如Select或是Where时，我们所做的仅是实例化装饰输入序列的可枚举类。
+
+链接装饰器
+~~~~~~~~~~
+
+链接装饰器会创建一个装饰器层。考虑下面的查询：
+
+.. code:: csharp
+
+    IEnumerable<int> query = new int[] { 5, 12, 3 }.Where   (n => n < 10)
+                                                   .OrderBy (n => n)
+                                                   .Select  (n => n * 10);
+
+每一个查询操作符实例化一个封装前一个序列的新装饰器。这个查询的对象模型显示在图8-4中。注意，这个对象模型是在枚举之前构建的。
+
+.. figure:: csharp_8_4.png
+   :alt: csharp_8_4.png
+
+   csharp\_8\_4.png
+当我们枚举query时，我们是在查询原始的数组，通过一个装饰器层或是装饰器链进行转换。
+
+图8-5显示以UML语法表示的相同的对象组合。Select装饰器引用OrderBy装饰器，而后者又引用Where装饰器，而后者引用数组。延迟执行的一个特性就是如果我们分步组合查询，我们就可以构建相同的对象模型：
+
+.. code:: csharp
+
+    IEnumerable<int>
+      source    = new int[] { 5, 12, 3 },
+      filtered  = source   .Where   (n => n < 10),
+      sorted    = filtered .OrderBy (n => n),
+      query     = sorted   .Select  (n => n * 10);
+
+查询如何执行
+~~~~~~~~~~~~
+
+下面是枚举前面查询的结果：
+
+.. code:: csharp
+
+    foreach (int n in query) Console.WriteLine (n);
+    30
+    50
+
+在幕后，foreach在Select装饰器上调用GetEnumerator。结果是一个结构化映射装饰器序列链的枚举器链。图8-6显示枚举处理时的执行流程。
+
+.. figure:: csharp_8_6.png
+   :alt: csharp_8_6.png
+
+   csharp\_8\_6.png
+在本章的第一节中，我们将查询比作一条生产线。扩展这个比喻，我们可以说LINQ查询是一个延迟的生产线，其中传送带会按需传送元素。构建查询就是构建一个生产线，所有的元素各在其位，但是没有元素传送。然后当消费者请求元素时，最右边的传送带被激活；并依次触发其他的传送带。LINQ遵循需求驱动的pull模式，而不是提供驱动的push模式。这一点是很重要的。
+
+子查询
+------
+
+子查询是包含在另一个查询Lambda表达式中的查询。下面的示例使用子查询按音乐家的最后一个名字进行排序：
+
+.. code:: csharp
+
+    string[] musos = { "David Gilmour", "Roger Waters", "Rick Wright" };
+    IEnumerable<string> query = musos.OrderBy (m => m.Split().Last());
+
+m.Split将每一个字符串转换为单词集合，然后在其基础上我们调用Last查询操作符。m.Split().Last是子查询；query指向外层查询。
+
+之所以可以进行子查询是因为我们可以在Lambda表达式的右侧放置任意的正确的C#表达式。子查询只是一个简单的另一个C#表达式。这就意味着子查询的规则同时遵循Lambda表达式的规则。
+
+子查询的作用范围被限制在所包含的表达式之中，并且可以引用外层的Lambda参数（或者是查询表达式中的范围变量）。
+
+m.Split().Last是一个非常简单的子查询。下面的查询获取数组中字符串长度与最短字符串匹配的所有字符串：
+
+.. code:: csharp
+
+    string[] names = { "Tom", "Dick", "Harry", "Mary", "Jay" };
+    IEnumerable<string> outerQuery = names
+      .Where (n => n.Length == names.OrderBy (n2 => n2.Length)
+                                    .Select  (n2 => n2.Length).First());
+    Tom, Jay
+
+下面是可以实现相同效果的查询表达式：
+
+.. code:: csharp
+
+    IEnumerable<string> outerQuery =
+      from   n in names
+      where  n.Length ==
+               (from n2 in names orderby n2.Length select n2.Length).First()
+      select n;
+
+因为外层的范围变量（n）在子查询的作用域内可见，我们不能重用n作为子查询的范围变量。
+
+当所包含的Lambda表达式进行计算机时子查询就会被执行。这就意味着子查询是依据外层查询的需要而执行的。我们也可以说是由外向里执行的。本地查询精确的遵循这种模型；解释查询（例如，数据库查询）在概念上遵循这种模型。
+
+子查询执行会在需要的时候向外层查询提反馈。在我们的示例中，子查询为每一个外层循环执行一次。如图8-7与8-8所示。
+
+我们可以以如下的方式来表达前面的子查询：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from   n in names
+      where  n.Length == names.OrderBy (n2 => n2.Length).First().Length
+      select n;
+
+使用Min聚合函数，我们可以进行进一步的简化：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from   n in names
+      where  n.Length == names.Min (n2 => n2.Length)
+      select n;
+
+.. figure:: csharp_8_7.png
+   :alt: csharp_8_7.png
+
+   csharp\_8\_7.png
+.. figure:: csharp_8_8.png
+   :alt: csharp_8_8.png
+
+   csharp\_8\_8.png
+在后面的部分中，我们将会描述如SQL表这样的源如何进行行查询。我们的示例将会执行一个完美的数据库查询，因为他将作为一个单元处理，只需要一次到数据库往复过程。然而，这个查询对于本地集合效率不高，因为子查询会为每一次处层循环迭代进行计算。我们可以通过单独运行子查询来避免这种低效：
+
+.. code:: csharp
+
+    int shortest = names.Min (n => n.Length);
+    IEnumerable<string> query = from   n in names
+                                where  n.Length == shortest
+                                select n;
+
+**子查询与延迟查询**
+
+子查询中的元素或是聚合操作符，例如First或是Count，不会强制外层查询立即执行－延迟查询对于外层查询仍然适用。这是因为子查询是间接调用的－在本地查询时通过委托，或者在解释查询中通过表达式树。
+
+当我们在Select表达式中包含子查询时会出现一个有趣的情况。在本地查询的情况下，我们实际上是在组合一个查询序列－每一个查询本身都会延迟查询。效果通常是透明的，而其进一步改善了效率。
+
+组合策略
+--------
+
+在本节中，我们将会描述用于构建更为复杂查询的三种策略：
+
+-  渐近查询构建（Progressive query construction）
+-  使用into关键字（Using the into keyword）
+-  封装查询（Wrapping queries）
+
+三者都是链式策略并生成相同的运行查询。
+
+渐近查询构建
+~~~~~~~~~~~~
+
+作为本章的开始，我们演示了如何渐近式的构建一个Fluent查询：
+
+.. code:: csharp
+
+    var filtered   = names    .Where   (n => n.Contains ("a"));
+    var sorted     = filtered .OrderBy (n => n);
+    var query      = sorted   .Select  (n => n.ToUpper());
+
+由于每一个涉及其中的查询操作符都返回一个装饰器序列，所得到的结果查询与我们由单表达式查询中所获得的链或是装饰器层相同。然而，渐近式构建查询有如下的一些优点：
+
+-  查询很容易编写
+-  我们可以有条件的添加查询操作符
+
+例如：
+
+if (includeFilter) query = query.Where (...)
+
+这要比下面的写法更高效：
+
+query = query.Where (n => !includeFilter \|\| )
+
+因为他避免了如果includeFilter为假时添加额外的查询操作符的可能。
+
+渐近式方法在查询理解方法也很有用。为了进行演示，假定我们要移除名字列表中的所有元音，并且对仍多于两个字符长度的名字以字母顺序显示。在Fluent语法中，在过滤之前通过组合我们可以使用单表达式编写如下的查询：
+
+.. code:: csharp
+
+    IEnumerable<string> query = names
+      .Select  (n => n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+                      .Replace ("o", "").Replace ("u", ""))
+      .Where   (n => n.Length > 2)
+      .OrderBy (n => n);
+    RESULT: { "Dck", "Hrry", "Mry" }
+
+将上面的查询直接翻译为查询表达式比较麻烦，因为select子句必须位于where与orderby子句之后。如果我们重新安排查询将select放在最后，则所得到的结果会不同：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from    n in names
+      where   n.Length > 2
+      orderby n
+      select  n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+               .Replace ("o", "").Replace ("u", "");
+    RESULT: { "Dck", "Hrry", "Jy", "Mry", "Tm" }
+
+幸运的是，以查询语法的形式有多种方法可以获得原始的结果。第一种是通过渐近式查询：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from   n in names
+      select n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+              .Replace ("o", "").Replace ("u", "");
+    query = from n in query where n.Length > 2 orderby n select n;
+    RESULT: { "Dck", "Hrry", "Mry" }
+
+into关键字
+~~~~~~~~~~
+
+into关键字可以使得我们在构建之后继续查询，他是渐近式查询的一种简写。使用inot，我们可以重写前面的查询如下：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from   n in names
+      select n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+              .Replace ("o", "").Replace ("u", "")
+      into noVowel
+        where noVowel.Length > 2 orderby noVowel select noVowel;
+
+我们可以使用into的唯一位置就是select或是group子句之后。into会重启查询，从而使得我们引入新的where，orderby与select子句。
+
+Fluent语法中与into等同的是一个更长的操作符链。
+
+**作用域规则**
+
+into关键字之后的所有查询变量都超出了其作用范围。下面的查询不会通过编译：
+
+.. code:: csharp
+
+    var query =
+      from n1 in names
+      select n1.ToUpper()
+      into n2                              // Only n2 is visible from here on.
+        where n1.Contains ("x")            // Illegal: n1 is not in scope.
+        select n2;
+
+要了解为什么，考虑上面的查询如何映射到Fluent语法：
+
+.. code:: csharp
+
+    var query = names
+      .Select (n1 => n1.ToUpper())
+      .Where  (n2 => n1.Contains ("x"));     // Error: n1 no longer in scope
+
+在Where过滤器运行时原始名字（n1）已经丢失。Where的输入序列只包含大写名字，从而不能基于n1进行过滤。
+
+封装查询
+~~~~~~~~
+
+渐近式构建的查询可以通过在一个查询的周围封装另一个查询来形成一条语句。通常的查询：
+
+.. code:: csharp
+
+    var tempQuery = tempQueryExpr
+    var finalQuery = from ... in tempQuery ...
+
+可以格式化为：
+
+var finalQuery = from ... in (tempQueryExpr)
+
+封装在语义上与渐近式查询构建或是使用into关键字的形式相同。所有情况下的最终结果是一个查询操作符的线性链。例如，考虑下面的查询：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from   n in names
+      select n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+              .Replace ("o", "").Replace ("u", "");
+    query = from n in query where n.Length > 2 orderby n select n;
+
+重新格式化为封装形式如下：
+
+.. code:: csharp
+
+    IEnumerable<string> query =
+      from n1 in
+      (
+        from   n2 in names
+        select n2.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+                 .Replace ("o", "").Replace ("u", "")
+      )
+      where n1.Length > 2 orderby n1 select n1;
+
+当转换为Fluent语法时，结果是与前面的示例相同的操作符的线性链。
+
+.. code:: csharp
+
+    IEnumerable<string> query = names
+      .Select  (n => n.Replace ("a", "").Replace ("e", "").Replace ("i", "")
+                      .Replace ("o", "").Replace ("u", ""))
+      .Where   (n => n.Length > 2)
+      .OrderBy (n => n);
+
+封装的查询会让人感到疑惑，因为他类似于我们前面所编写的子查询。两者都有内层与外层查询的概念。然而，当转换为Fluent语法时，我们就会看到封装只是一个简单的顺序链操作符。最终的结果与子查询没有相似之处，而后者是将内层查询嵌入到另一个查询的Lambda表达式中。
+
+回到前面的相似点：封装的内层查询加在前一个传送带上。相对应的，子查询位于传送带上并且通过传送带的Lambda工作器按需激活。
+
+构建策略
+--------
+

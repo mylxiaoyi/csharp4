@@ -1,0 +1,1501 @@
+Chapter 7. Collections
+======================
+
+.NET框架提供了一个用于存储与管理对象集合的标准类集合。这些包括可扩展的列表，链表，有序与无序的字典以及数组等。在这些当中，只有数组形成C#语言的一部分；其他的集合都是我们可以实例化的类。
+
+框架中用于集合的类型可以分为下列几类：
+
+-  定义了标准集合协议的接口
+-  已可用的集合类（列表，字典等）
+
+用于编写程序特定集合的基类
+
+本章探讨这些类别，并且具有额外的部分来讨论在确定元素数量与顺序时所用的类型。
+
+集合名字空间如下：
+
++----------------------------------+------------------------------+
+| 名字空间                         | 所包含的内容                 |
++----------------------------------+------------------------------+
+| System.Collections               | 非泛型集合类与接口           |
++----------------------------------+------------------------------+
+| System.Collections.Specialized   | 强类型非泛型集合类           |
++----------------------------------+------------------------------+
+| System.Collections.Generic       | 泛型集合类与接口             |
++----------------------------------+------------------------------+
+| System.Collections.ObjectModel   | 用于自定义集合的代理与基类   |
++----------------------------------+------------------------------+
+| System.Collections.Concurrent    | 类型安全集合                 |
++----------------------------------+------------------------------+
+
+枚举
+----
+
+在计算中，有各种集合类型，由简单的数据结构，例如数组或是链表，到更为复杂的数据结构，例如红黑树与散列表。尽管这些数据的内部实现与外部特性变量很大，遍历这些集合的功能却是共同的需求。框架通过允许不同的数据结构公开一个共同的遍历API的一对接口（IEnumerable，IEnumerator以及对应的泛型接口）来提供这种需求。他们是图7-1所示的更大的集合接口集合的一部分。
+
+.. figure:: csharp_7_1.png
+   :alt: csharp_7_1.png
+
+   csharp\_7\_1.png
+IEnumerable与IEnumerator
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+IEnumerator接口定义了集合中的元素以forward-only方式进行遍历或是枚举所使用的基础底层协议。其声明如下：
+
+.. code:: csharp
+
+    public interface IEnumerator
+    {
+      bool MoveNext();
+      object Current { get; }
+      void Reset();
+    }
+
+MoveNext将当前元素或是“光标”指向下一个位置，如果在集合中没有更多的元素则返回false。Current返回在当前位置的元素（通常由object转换为更特殊的类型）。在获取每一个元素之前必须调用MoveNext，这是为了适用于空集合。如果实现了Reset方法，则会使得光标回到起始位置，从而再次枚举集合。（通常避免调用Reset方法，因为并不是所有的枚举器都支持这个方法。）
+
+集合并不实现枚举器；相反，他们通过IEnumerable接口提供枚举器：
+
+.. code:: csharp
+
+    public interface IEnumerable
+    {
+      IEnumerator GetEnumerator();
+    }
+
+通过定义一个返回枚举器的方法，IEnumerable提供了灵活性，因为迭代可以移到另一个类中。而且，这就意味着多个消费者可以同时枚举集合，而不会相互干扰。IEnumerable可以被认为是“IEnumeratorProvider”，并且他是集合所实现的最基本接口。
+
+下面的示例演示了IEnumerable与IEnumerator的底层使用：
+
+.. code:: csharp
+
+    string s = "Hello";
+    // Because string implements IEnumerable, we can call GetEnumerator():
+    IEnumerator rator = s.GetEnumerator();
+    while (rator.MoveNext())
+    {
+      char c = (char) rator.Current;
+      Console.Write (c + ".");
+    }
+    // Output:  H.e.l.l.o.
+
+然而通常并不直接以这种方式在枚举器上调用方法，因为C#提供了一个语法糖：foreach语句。下面是使用foreach重新编写的相同示例：
+
+.. code:: csharp
+
+    string s = "Hello";      // The String class implements IEnumerable
+    foreach (char c in s)
+      Console.Write (c + ".");
+
+IEnumerable与IEnumerator
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+IEnumerator与IEnuerable几乎总是与他们的扩展泛型版本联合实现：
+
+.. code:: csharp
+
+    public interface IEnumerator<T> : IEnumerator, IDisposable
+    {
+      T Current { get; }
+    }
+    public interface IEnumerable<T> : IEnumerable
+    {
+      IEnumerator<T> GetEnumerator();
+    }
+
+通过定义Current与GetEnumerator的类型版本，这些接口加强了静态类型安全，避免了使用值类型元素时的装箱负担，并且对于消费者更为方便。数组自动实现了IEnumerable（其中T是数组的成员类型）。
+
+借助于改进的静态类型安全，使用字符数组调用下列方法会产生编译时错误：
+
+.. code:: csharp
+
+    void Test (IEnumerable<int> numbers) { ... }
+
+对于集合类公开IEnumerable，同时通过显式接口实现隐藏非泛型的IEnumerable是一个标准用法。这样当我们直接调用GetEnumerator()时，我们可以获得类型安全的泛型IEnumerator。然而有时会由向后兼容的原因破坏这一规则。一个明显的例子就是数组－数组必须返回非泛型的IEnumerator从而避免破坏以前的代码。为了获得一个泛型的IEnumerator，我们必须转换为公开显式接口：
+
+.. code:: csharp
+
+    int[] data = { 1, 2, 3 };
+    var rator = ((IEnumerable <int>)data).GetEnumerator();
+
+幸运的是，借助于foreach语句，我们很少需要编写这种类型的代码。
+
+**IEnumerable与IDisposable**
+
+IEnumerable实现了IDisposable。这可以使得枚举器存储资源引用，例如数据库链接，并且保证当枚举完成时这些资源被释放。foreach语句会识别到这种细节并将：
+
+foreach (var element in somethingEnumerable) { ... }
+
+转换为：
+
+.. code:: csharp
+
+    using (var rator = somethingEnumerable.GetEnumerator())
+      while (rator.MoveNext())
+      {
+        var element = rator.Current;
+        ...
+      }
+
+using块可以保证销毁。
+
+实现枚举接口
+~~~~~~~~~~~~
+
+由于下列原因我们也许会希望实现IEnuerable或是IEnumerable：
+
+-  为了支持foreach语句
+-  与期望标准集合的内容交互
+-  作为更复杂集合接口的一部分
+-  为了支持集合初始化器
+
+为了实现IEnumerable/IEnumerable，我们必须提供一个枚举器。我们可以通过下列方法来实现：
+
+-  如果类“包装”了其他集合，通过返回包装的集合的枚举器实现
+-  通过使用yield return的迭代器实现
+-  通过实例化我们自己的IEnumerator/IEnumerator实现来实现
+
+返回另一个集合的枚举器实质就是调用内层集合的GetEnumerator方法。然而这只适用于最简单的场景，其中内层集合中的元素正是我们所需要的。一个更为灵活的方法是使用C#的yield
+return语句编写一个迭代器。迭代器是辅助编写集合的C#语言特性，与辅助消费集合的foreach语句方式相同。迭代器自动处理IEnumerable与IEnumerator或是他们泛型版本的实现。下面是一个简单的示例：
+
+.. code:: csharp
+
+    public class MyCollection : IEnumerable
+    {
+      int[] data = { 1, 2, 3 };
+      public IEnumerator GetEnumerator()
+      {
+        foreach (int i in data)
+          yield return i;
+      }
+    }
+
+注意“黑色魔法”：GetEnumerator看起来根本就没有返回枚举器。通过分析yield
+return语句，编译器会在幕后编写一个隐藏的嵌入枚举器类，然后重构GetEnumerator来实例化并返回该类。迭代器是非常强大且简单的（并且是LINQ实现的基础）。
+
+使用这一方法，我们也可以实现泛型接口IEnumerable：
+
+.. code:: csharp
+
+    public class MyGenCollection : IEnumerable<int>
+    {
+      int[] data = { 1, 2, 3 };
+      public IEnumerator<int> GetEnumerator()
+      {
+        foreach (int i in data)
+          yield return i;
+      }
+      IEnumerator IEnumerable.GetEnumerator()     // Explicit implementation
+      {                                           // keeps it hidden.
+        return GetEnumerator();
+      }
+    }
+
+因为IEnumerable实现了IEnuerable，我们必须同时实现GetEnumerator的泛型与非泛型版本。为了与标准实践相一致，我们显式实现了非泛型版本。他可以简单的调用泛型的GetEnumerator，因为IEnumerator实现了IEnumerator。
+
+我们刚刚所编写的类可以适用于作为构建复杂集合的基础。然而，如果我们仅是需要一个简单的IEnumerable实现，yield
+return语句可以获得简单的变化。除了编写类，我们可以将迭代逻辑移入返回一个泛型IEnumerable的方法中，并且让编译器来处理其他的内容。如下面的示例：
+
+.. code:: csharp
+
+    public class Test
+    {
+      public static IEnumerable <int> GetSomeIntegers()
+      {
+        yield return 1;
+        yield return 2;
+        yield return 3;
+      }
+    }
+
+下面是我们实际使用的方法：
+
+.. code:: csharp
+
+    foreach (int i in Test.GetSomeIntegers())
+      Console.WriteLine (i);
+    // Output
+    1
+    2
+    3
+
+编写GetEnumerator的最后一种方法就是编写直接实现IEnumerator的类。这就是编译器在幕后所做的工作。下面的示例定义了一个硬编码包含1，2与3的集合：
+
+.. code:: csharp
+
+    public class MyIntList : IEnumerable
+    {
+      int[] data = { 1, 2, 3 };
+      public IEnumerator GetEnumerator()
+      {
+        return new Enumerator (this);
+      }
+      class Enumerator : IEnumerator       // Define an inner class
+      {                                    // for the enumerator.
+        MyIntList collection;
+        int currentIndex = ?1;
+        internal Enumerator (MyIntList collection)
+        {
+          this.collection = collection;
+        }
+        public object Current
+        {
+          get
+          {
+            if (currentIndex == ?1)
+              throw new InvalidOperationException ("Enumeration not started!");
+            if (currentIndex == collection.data.Length)
+              throw new InvalidOperationException ("Past end of list!");
+            return collection.data [currentIndex];
+          }
+        }
+        public bool MoveNext()
+        {
+          if (currentIndex > collection.data.Length) return false;
+          return ++currentIndex < collection.data.Length;
+        }
+        public void Reset() { currentIndex = ?1; }
+      }
+    }
+
+注意，第一次调用MoveNext方法应将光标移动列表中的第一个元素上。
+
+为了使用迭代器实现相同的功能，我们必须同时实现IEnumerator。下面是为了简单忽略边界检测的示例：
+
+.. code:: csharp
+
+    class MyIntList : IEnumerable<int>
+    {
+      int[] data = { 1, 2, 3 };
+      // The generic enumerator is compatible with both IEnumerable and
+      // IEnumerable<T>. We implement the nongeneric GetEnumerator method
+      // explicitly to avoid a naming conflict.
+      public IEnumerator<int> GetEnumerator() { return new Enumerator(this); }
+      IEnumerator IEnumerable.GetEnumerator() { return new Enumerator(this); }
+      class Enumerator : IEnumerator<int>
+      {
+        int currentIndex = ?1;
+        MyIntList collection;
+        internal Enumerator (MyIntList collection)
+        {
+          this.collection = collection;
+        }
+        public int Current { get { return collection.data [currentIndex]; } }
+        object IEnumerator.Current { get { return Current; } }
+        public bool MoveNext()
+        {
+          return ++currentIndex < collection.data.Length;
+        }
+        public void Reset() { currentIndex = ?1; }
+        // Given we don't need a Dispose method, it's good practice to
+        // implement it explicitly, so it's hidden from the public interface.
+        void IDisposable.Dispose() {}
+      }
+    }
+
+具有泛型的示例会比较，因为IEnumerator.Current不需要由int转换为object，从而避免了装箱的负担。
+
+ICollection与IList接口
+----------------------
+
+尽管枚举接口为在集合上的forward-only迭代提供了协议，但是他们并没有提供相应的机制来确定集合的大小，通过索引访问成员，查找或是修改集合。为了提供这些功能，.NET框架定义了ICollection，IList与IDictionary接口。每一个接口都有泛型与非泛型版本；非泛型版本大多数都是因为遗留原因而存在的。
+
+这些接口的继承层次显示在图7-1中。最简单的总结方式如下：
+
+-  IEnumerable（IEnumerable）：提供了最少的功能（仅是枚举）
+-  ICollection（ICollection）：提供了中等功能（例如Count属性）
+-  IList/IDictionary及非泛型版本：提供了最大功能（包括通过索引/键的“随机”访问）
+
+泛型与非泛型版本的不同在于我们的期望，特别是ICollection的情况。大多数都是历史原因：因为泛型出现较晚，泛型接口的开发都是事后聪明。由于这个原因，ICollection并没有扩展ICollection，IList并没有扩展IList，而IDictionary也没有扩展IDictionay。当然，集合类本身可以自由实现两个接口版本。
+
+本节将会探讨ICollection，IList及其非泛型版本。
+
+ICollection与ICollection
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+ICollection是用于可计数的对象集合的标准接口。他提供了确定集合大小（Count)，在集合中是否存在某个元素（Contains），将集合拷贝到数组（ToArray），并且确定是否为只读（IsReadOnly）等功能。对于可写的集合，我们可以由集合中Add，Remove与Clear元素。并且由于他扩展IEnuerable，他也可以通过foreach语句进行遍历：
+
+.. code:: csharp
+
+    public interface ICollection<T> : IEnumerable<T>, IEnumerable
+    {
+      int Count { get; }
+      bool Contains (T item);
+      void CopyTo (T[] array, int arrayIndex);
+      bool IsReadOnly { get; }
+      void Add(T item);
+      bool Remove (T item);
+      void Clear();
+    }
+
+非泛型版本类似于提供了一个可计数的集合，但是并没有提供修改列表或是检测元素成员关系的功能：
+
+.. code:: csharp
+
+    public interface ICollection : IEnumerable
+    {
+       int Count { get; }
+       bool IsSynchronized { get; }
+       object SyncRoot { get; }
+       void CopyTo (Array array, int index);
+    }
+
+非泛型接口同时定义了同步辅助的接口－他们出现在泛型版本中，因为线程安全不再被认为是集合所固有的。
+
+两个接口都是非常直接来实现的。如果实现了只读的ICollection，Add，Remove与Clear方法应抛出NotSupportException。
+
+这些接口通常是与IList或是IDictionary接口联合实现的。
+
+IList与IList
+~~~~~~~~~~~~
+
+IList是用于通过位置索引集合的标准接口。除了由ICollection与IEnumerable所继承的功能以外，他提供了通过位置（索引）读取或写元素以及通过位置插入或删除的功能：
+
+.. code:: csharp
+
+    public interface IList<T> : ICollection<T>, IEnumerable<T>, IEnumerable
+    {
+      T this [int index] { get; set; }
+      int IndexOf (T item);
+      void Insert (int index, T item);
+      void RemoveAt (int index);
+    }
+
+IndexOf方法在列表执行线性搜索，如果没有找到指定的元素则返回-1。
+
+IList的非泛型版本具有更多的成员，因为他由ICollection继承得更少：
+
+.. code:: csharp
+
+    public interface IList : ICollection, IEnumerable
+    {
+      object this [int index] { get; set }
+      bool IsFixedSize { get; }
+      bool IsReadOnly  { get; }
+      int  Add      (object value);
+      void Clear();
+      bool Contains (object value);
+      int  IndexOf  (object value);
+      void Insert   (int index, object value);
+      void Remove   (object value);
+      void RemoveAt (int index);
+    }
+
+非泛型的IList接口的Add方法返回一个整数－这是新添加的元素的索引。相对应的，ICollection的Add方法具有void返回类型。
+
+通用目的的List类是IList与IList的精髓实现。C#数组也实现了泛型与非泛型的IList（尽管添加或是删除元素的方法为显式的接口实现所隐藏，并且如果调用时会抛出NotSupportException）。
+
+Array类
+-------
+
+Array类是所有一维与多维数组的隐式基类，而是且实现标准集合接口的最基础类型之一。Array类提供了类型一致性，所以通常的方法集合适用于所有数组，而无论其声明或是底层元素类型。
+
+由于数组是如此基础，C#提供了显式语法用于声明与初始化，我们在第2章与第3章中进行了描述。当使用C#语法声明数组时，CLR隐式继承Array类－合成一个适用于数组维度与元素类型的伪类型。这个伪类型实现了类型泛型集合接口，例如IList。
+
+CLR在构建上对数组进行特殊处理，为其分配一个连续的内存空间。这使得数组中的索引非常高效，但是也阻止了以后的尺寸变化。
+
+Array以泛型与非泛型形式实现了IList集合接口。尽管IList本身是被显式实现的来保持Array的公开接口方法的清晰，例如Add或是Remove，他们在确定长度的集合上会抛出异常，例如数组。Array类确实提供了一个Resize方法，尽管他是通过创建一个新数组并拷贝元素来实现的。除了效率低下，程序中其他位置的指向数组的引用仍然指向原始版本。可调整尺寸的集合的更好解决方法就是使用List类。
+
+Array以泛型与非泛型的方式实现了IList集合接口。IList本身被显式实现，来保持Array的公开接口方法的清晰，例如Add或是Remove方法，这两个方法会在确定的长度的集合上抛出异常，例如数组。Array类确实提供了一个静态的Resize方法，但是这个方法是都是创建一个新数组并拷贝元素来实现的。在效率低下的同时，程序中其他位置指向数组的引用也仍然会指向原始的版本。用于可调整尺寸的集合的更好解决方法是使用List类。
+
+数组可以包含值类型或是引用类似。值类型元素直接存储在数组中，所以包含三个长整形（每个占8个字节）的数组将会占用24个字节的连续内存空间。然而，引用类型元素在数组中只占用引用所需的空间（在32位环境下为4个字节，或是64位环境下的8个字节）。图7-2显示了下列程序中数组在内存中的效果：
+
+.. code:: csharp
+
+    StringBuilder[] builders = new StringBuilder [5];
+    builders [0] = new StringBuilder ("builder1");
+    builders [1] = new StringBuilder ("builder2");
+    builders [2] = new StringBuilder ("builder3");
+    long[] numbers = new long [3];
+    numbers [0] = 12345;
+    numbers [1] = 54321;
+
+.. figure:: csharp_7_2.png
+   :alt: csharp_7_2.png
+
+   csharp\_7\_2.png
+因为Array是一个类，所以总是引用类型，而无论数组元素的类型是什么。这就意味着语句arrayB
+=
+arrayA将会导致指向同一个数组的两个引用。类似的，两个不同的数组在相等测试中总是失败－除非我们使用了自定义的比较器。框架4.0提供了一种比较数组或是元组中元素的方法，我们可以通过StructuralComparisions类型来访问：
+
+.. code:: csharp
+
+    object[] a1 = { "string", 123, true };
+    object[] a2 = { "string", 123, true };
+    Console.WriteLine (a1 == a2);                          // False
+    Console.WriteLine (a1.Equals (a2));                    // False
+    Console.WriteLine (a1.Equals (a2,
+     StructuralComparisons.StructuralEqualityComparer));   // True
+
+数组可以使用Clone方法进行复制：arrayB =
+arrayA.Clone()。然而这会得到一个影子拷贝，意味着只有数组本身所表示的内存才会被拷贝。如果数组包含值类型对象，值本身会被拷贝；如果数组包含引用类型对象，只有引用会被拷贝（产生两个数组，其成员指向相同的对象）。图7-3显示了在我们的程序中添加下面代码后的结果：
+
+.. code:: csharp
+
+    StringBuilder[] builders2 = builders;
+    StringBuilder[] shallowClone = (StringBuilder[]) builders.Clone();
+
+.. figure:: csharp_7_3.png
+   :alt: csharp_7_3.png
+
+   csharp\_7\_3.png
+要创建深拷贝－引用类型子对象也被拷贝－我们遍历数组并且手动拷贝每一个元素。同样的规则也适用于其他的.NET集合类型。
+
+尽管数组被设计用来通过32位索引器来使用，但是通过一些可以同时接受Int32与Int64参数的方法，也可以对于64位索引器也具有有限的支持（使得数组在理论上编址2^64个元素）。然而这并没有什么实际用下，因为CLR不会允许一个对象－包括数组－超出2GB的尺寸（无论是在32位还是64位环境中）。
+
+构建与索引
+~~~~~~~~~~
+
+创建与索引数组最简单的方法是通过C#的语言构造器：
+
+.. code:: csharp
+
+    int[] myArray = { 1, 2, 3 };
+    int first = myArray [0];
+    int last = myArray [myArray.Length - 1];
+
+或者是我们可以通过调用Array.CreateInstance动态实例化数组。这可以使得我们在运行时指定元素类型与数组维度，同时允许我们通过指定下界来使用非基于零的数组。非基于零的数组并不是CLS兼容的。
+
+静态的GetValue与SetValue方法可以使得我们访问动态创建的数组中的元素（他们也可以应用于普通的数组）：
+
+.. code:: csharp
+
+     // Create a string array 2 elements in length:
+     Array a = Array.CreateInstance (typeof(string), 2);
+     a.SetValue ("hi", 0);                             //  → a[0] = "hi";
+     a.SetValue ("there", 1);                          //  → a[1] = "there";
+     string s = (string) a.GetValue (0);               //  → s = a[0];
+     // We can also cast to a C# array as follows:
+     string[] cSharpArray = (string[]) a;
+     string s2 = cSharpArray [0];
+
+动态创建的零索引的数组可以转换为匹配或是兼容类型的C#数组。例如，如果Apple继承于Fruit，Apple[]可以转换为Fruit[]。这就引出了为什么object[]不用作唯一的数组类型而是使用Array类。这是因为object[]并不与多维数组和值类型数组（以及非基于零的数组）兼容。int[]数组不可以转换为ojbect[]。因此我们需要Array类作为完全类型一致。
+
+GetValue与SetValue也适用于编译器所创建的数组，并且当编写处理任意类型与任意维度的数组时，这两个方法十分有用。对于多维数组，他们接受索引器的数组：
+
+.. code:: csharp
+
+    public object GetValue (params int[] indices)
+    public void   SetValue (object value, params int[] indices)
+
+下列方法输出了数组的第一个元素，而不论其维度：
+
+.. code:: csharp
+
+     void WriteFirstValue (Array a)
+     {
+       Console.Write (a.Rank + "-dimensional; ");
+       // The indexers array will automatically initialize to all zeros, so
+       // passing it into GetValue or SetValue will get/set the zero-based
+       // (i.e., first) element in the array.
+       int[] indexers = new int[a.Rank];
+       Console.WriteLine ("First value is " +  a.GetValue (indexers));
+     }
+     void Demo()
+     {
+       int[]  oneD = { 1, 2, 3 };
+       int[,] twoD = { {5,6}, {8,9} };
+       WriteFirstValue (oneD);   // 1-dimensional; first value is 1
+       WriteFirstValue (twoD);   // 2-dimensional; first value is 5
+     }
+
+当一个数组被实例化时，无论是通过语言语法还是Array.CreateInstance，其元素是被自动初始化的。对于引用类型元素的数组，这就意味着初始化为null；对于值类型元素的数组，这就意味着调用值类型的默认构造器。Array数组也可以通过Clear方法在需要时提供这一功能：
+
+public static void Clear (Array array, int index, int length);
+
+这个方法并不会影响数组的尺寸。这是与Clear的通常用法相对应的（例如ICollection.Clear），其中集合会被缩小为零元素。
+
+枚举
+~~~~
+
+数组可以很容易使用foreach语句进行枚举：
+
+.. code:: csharp
+
+    int[] myArray = { 1, 2, 3};
+    foreach (int val in myArray)
+      Console.WriteLine (val);
+
+我们也可以使用静态的Array.ForEach方法进行枚举，其定义如下：
+
+public static void ForEach (T[] array, Action action);
+
+该方法使用Action委托，其签名如下：
+
+public delegate void Action (T obj);
+
+下面是使用Array.ForEach重写的示例：
+
+Array.ForEach (new[] { 1, 2, 3 }, Console.WriteLine);
+
+长度与维度
+~~~~~~~~~~
+
+Array提供下列方法与属性用于查询长度与维度：
+
+.. code:: csharp
+
+    public int  GetLength      (int dimension);
+    public long GetLongLength  (int dimension);
+    public int  Length       { get; }
+    public long LongLength   { get; }
+    public int GetLowerBound (int dimension);
+    public int GetUpperBound (int dimension);
+    public int Rank { get; }    // Returns number of dimensions in array
+
+GetLength与GetLongLength返回指定维度的长度（0用于一维数组），而Length与LongLength返回数组中元素的总数目－包括所有维度。
+
+GetLowerBound与GetUpperBound对于非零索引的数组十分有用。GetUpperBound所返回的结果与GetLowerBound加上任意指定维度的GetLength的值相同。
+
+搜索
+~~~~
+
+Array类提供了下列方法用于在一维数组中查找元素：
+
+.. code:: csharp
+
+    public static int BinarySearch<T> (T[] array,   object value);
+    public static int BinarySearch<T> (T[] array,   object value, IComparer<T>
+                                                                  comparer);
+    public static int BinarySearch    (Array array, object value);
+    public static int BinarySearch    (Array array, object value, IComparer
+                                                                  comparer);
+    public static int IndexOf<T>      (T[] array,   T value);
+    public static int IndexOf         (Array array, object value);
+    public static int LastIndexOf<T>  (T[] array,   T value);
+    public static int LastIndexOf     (Array array, object value);
+    // Predicate-based searching:
+    public static T    Find<T>        (T[] array, Predicate<T> match);
+    public static T    FindLast<T>    (T[] array, Predicate<T> match);
+    public static T[]  FindAll<T>     (T[] array, Predicate<T> match);
+    public static bool Exists<T>        (T[] array, Predicate<T> match);
+    public static bool TrueForAll<T>    (T[] array, Predicate<T> match);
+    public static int  FindIndex<T>     (T[] array, Predicate<T> match);
+    public static int  FindLastIndex<T> (T[] array, Predicate<T> match);
+
+同时以粗体显示的方法被重载来接受下面的额外参数：
+
+.. code:: csharp
+
+    int index   // starting index at which to begin searching
+    int length  // maximum number of elements to search
+
+如果指定的值没有找到，这些方法都不会抛出异常。相反，如果元素没有找到，则方法会返回整数-1（假定是零索引数组），而返回泛型类型的方法会返回类型的默认值。
+
+二分查找方法非常快速，但是该方法只适用于已排序的数组，并且要求元素可以比较顺序，而不是简单的相等。为此，二分查找方法可以接受IComparer或是IComparer对象来确定顺序。这必须与在普通排序数组中所用的任意比较器相一致。如果没有提供比较器，则会应用类型的默认排序算法，基于其IComparable/IComparable实现。
+
+IndexOf与LastIndexOf方法在数组上执行简单的遍历，返回与指定的值匹配的第一个元素（或最后一个）的位置。
+
+基于预测的搜索算法使用一个方法委托或是Lambda表达式来判断一个匹配的元素是否匹配。预测只是一个简单的接受对象的委托，并且返回true或false：
+
+public delegate bool Predicate (T object);
+
+在下面的示例中，我们在数据中查找包含字符a的名字：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      string[] names = { "Rodney", "Jack", "Jill" };
+      string match = Array.Find (names, ContainsA);
+      Console.WriteLine (match);     // Jack
+    }
+    static bool ContainsA (string name) { return name.Contains ("a"); }
+
+下面是使用匿名方法实现的相同代码：
+
+.. code:: csharp
+
+    string[] names = { "Rodney", "Jack", "Jill" };
+    string match = Array.Find (names, delegate (string name)
+      { return name.Contains ("a"); } );
+
+Lambda表达式可以进一步精简代码：
+
+.. code:: csharp
+
+    string[] names = { "Rodney", "Jack", "Jill" };
+    string match = Array.Find (names, n => n.Contains ("a"));     // Jack
+
+FindAll返回一个满足预测的所有元素的数组。事实上，他与System.Linq名字空间中的Enumerable.Where等同，所不同的是FindAll返回一个匹配元素的数组，而不是相同的IEnumerable。
+
+Exists方法会在数组成员满足指定的预测时返回true，并且与System.Linq.Enumerable中的Any等同。
+
+TrueForAll会在所有元素满足预测时返回true，并且与System.Linq.Enumerable中的All等同。
+
+排序
+~~~~
+
+Array具有下列内建的排序方法：
+
+.. code:: csharp
+
+    // For sorting a single array:
+    public static void Sort<T> (T[] array);
+    public static void Sort    (Array array);
+    // For sorting a pair of arrays:
+    public static void Sort<TKey,TValue> (TKey[] keys, TValue[] items);
+    public static void Sort              (Array keys, Array items);
+
+所有这些方法都被重载以接受下列参数：
+
+.. code:: csharp
+
+    int index                 // Starting index at which to begin sorting
+    int length                // Number of elements to sort
+    IComparer<T> comparer     // Object making ordering decisions
+    Comparison<T> comparison  // Delegate making ordering decisions
+
+下列代码演示了Sort的简单用法：
+
+.. code:: csharp
+
+    int[] numbers = { 3, 2, 1 };
+    Array.Sort (numbers);                     // Array is now { 1, 2, 3 }
+
+接受一对数组的方法会基于第一个数组的顺序先后重排每个数组中的元素。在下面的示例中，数字与相对应的单词都会以数值顺序进行排序：
+
+.. code:: csharp
+
+    int[] numbers = { 3, 2, 1 };
+    string[] words = { "three", "two", "one" };
+    Array.Sort (numbers, words);
+    // numbers array is now { 1, 2, 3 }
+    // words   array is now { "one", "two", "three" }
+
+Array.Sort要求数组中的元素实现IComparable。这就意味着大多数的基础C#类型（例如整数）都可以进行排序。如果元素本身不能比较，或者是我们希望重写默认的排序方法，我们必须提供一个带有报告两个元素相对位置的自定义comparison提供的Sort。有两种方法来实现：
+
+-  通过实现了IComparer/IComparer的助手对象
+-  通过Comparison委托：public delegate int Comparison (T x, T y);
+
+Comparison委托遵循与IComparer.CompareTo相同的语义：如果x在y的前面，则会返回一个负数；如果x在y的后面，则会返回一个正数；如果x与y具有相同的排序位置，则返回0。
+
+在下面的示例中，我们对整数数组进行排序，从而使得奇数在前面：
+
+.. code:: csharp
+
+    int[] numbers = { 1, 2, 3, 4, 5 };
+    Array.Sort (numbers, (x, y) => x % 2 == y % 2 ? 0 : x % 2 == 1 ? ?1 : 1);
+    // numbers array is now { 3, 5, 1, 2, 4 }
+
+反转元素
+~~~~~~~~
+
+下面的Array方法反转数组中的全部或是部分元素顺序：
+
+.. code:: csharp
+
+    public static void Reverse (Array array);
+    public static void Reverse (Array array, int index, int length);
+
+拷贝，转换与尺寸调整
+~~~~~~~~~~~~~~~~~~~~
+
+Array提供了浅拷贝与克隆方法：
+
+.. code:: csharp
+
+    // Instance methods:
+    public object Clone();
+    public void CopyTo (Array array, int index);
+    // Static methods:
+    public static void Copy (Array sourceArray,
+                             Array destinationArray,
+                             int length);
+    public static void Copy (Array sourceArray,      int sourceIndex,
+                             Array destinationArray, int destinationIndex,
+                             int length);
+    public static void ConstrainedCopy (
+                             Array sourceArray,      int sourceIndex,
+                             Array destinationArray, int destinationIndex,
+                             int length);
+    public static ReadOnlyCollection<T> AsReadOnly<T> (T[] array)
+    public static TOutput[] ConvertAll<TInput, TOutput>
+      (TInput[] array, Converter<TInput, TOutput> converter)
+    public static void Resize<T> (ref T[] array, int newSize);
+
+Copy与CopyTo方法被重载来接受Int64索引参数。
+
+Clone方法返回一个完全新的数组（浅拷贝）。Copy与CopyTo方法拷贝数组中的一个连续子集。拷贝多维矩形数组要求我们将多维索引映射到线性索引。例如，3x3数组的中间块（position[1,1]）被表示为索引4，计算方法为1\*3+1。源与目标范围可以重叠而不会产生问题。
+
+ConstrainedCopy执行原子操作：如果所请求的所有元素不能被成功拷贝（例如由于类型错误），则会回滚操作。
+
+AsReadOnly返回一个阻止元素被重新赋值的包装器。ConvertAll创建并返回一个TOutput类型元素的新数组，调用所提供的Converter委托来拷贝元素。Converter定义如下：
+
+public delegate TOutput Converter (TInput input)
+
+下面的代码将一个浮点数组转换为一个整数数组：
+
+.. code:: csharp
+
+    float[] reals = { 1.3f, 1.5f, 1.8f };
+    int[] wholes = Array.ConvertAll (reals, r => Convert.ToInt32 (r));
+    // wholes array is { 1, 2, 2 }
+
+Resize方法通过创建一个新数组并拷贝元素来实现，通过索引参数返回一个新数组。然而，其他对象中指向原始数组的引用会保持不变。
+
+列表，队列，栈与集合
+--------------------
+
+框架提供了一个实现本章前面所描述的接口的具体集合类的集合。本章关注于列表类集合。正如我们前面所讨论的接口，对于每一个类型我们通常都会有泛型与非泛型版本的选择。考虑到灵活性与性能，泛型类会更胜一筹，保留非泛型版本的原因是为了向后兼容。这与集合接口的情况不同，后者非泛型版本依然有用。
+
+在本节所讨论的这些为中，泛型的List类是最经常使用的。
+
+List与ArrayList
+~~~~~~~~~~~~~~~
+
+泛型List与非泛型的ArrayList类提供了尺寸动态变化的对象数组，并且是最经常使用的集合类之一。ArrayList实现了IList，而List同时实现了IList与IList。与数组不同，所有的接口都是公开实现的，并且方法，例如Add与Remove都被公开，并如我们所期望的样子工作。
+
+在内部，List与ArrayList通过维护一个内部对象数组，并且当到达容量极限时使用一个更大的数组替换的方式来实现。添加元素效率较高（因为通常在结尾处总是有空位置），但是插入元素很慢（因为插入位置之后的所有元素都必须移动以空出一个位置）。类似于数组，如果在一个已排序的列表上使用BinarySearch方法，则查找的效率较高，否则效率较低，因为每一个元素都必须进行单独检测。
+
+List与ArrayList提供了接受一个已存在的元素集合的构造器：这些构造器会将已存在集合中的元素拷贝到新的List或是ArrayList中：
+
+.. code:: csharp
+
+    public class List <T> : IList <T>
+    {
+      public List ();
+      public List (IEnumerable<T> collection);
+      public List (int capacity);
+      // Add+Insert
+      public void Add         (T item);
+      public void AddRange    (IEnumerable<T> collection);
+      public void Insert      (int index, T item);
+      public void InsertRange (int index, IEnumerable<T> collection);
+      // Remove
+      public bool Remove      (T item);
+      public void RemoveAt    (int index);
+      public void RemoveRange (int index, int count);
+      public int  RemoveAll   (Predicate<T> match);
+      // Indexing
+      public T this [int index] { get; set; }
+      public List<T> GetRange (int index, int count);
+      public Enumerator<T> GetEnumerator();
+      // Exporting, copying and converting:
+      public T[] ToArray();
+      public void CopyTo (T[] array);
+      public void CopyTo (T[] array, int arrayIndex);
+      public void CopyTo (int index, T[] array, int arrayIndex, int count);
+      public ReadOnlyCollection<T> AsReadOnly();
+      public List<TOutput> ConvertAll<TOutput> (Converter <T,TOutput>
+                                                converter);
+      // Other:
+      public void Reverse();            // Reverses order of elements in list.
+      public int Capacity { get;set; }  // Forces expansion of internal array.
+      public void TrimExcess();         // Trims internal array back to size.
+      public void Clear();              // Removes all elements, so Count=0.
+    }
+
+    public delegate TOutput Converter <TInput, TOutput> (TInput input);
+
+除了这些成员，List还提供了所有Array的搜索与排序方法的实例版本。
+
+下面的代码演示了List的属性与方法。
+
+.. code:: csharp
+
+    List<string> words = new List<string>();    // New string-typed list
+    words.Add ("melon");
+    words.Add ("avocado");
+    words.AddRange (new[] { "banana", "plum" } );
+    words.Insert (0, "lemon");                           // Insert at start
+    words.InsertRange (0, new[] { "peach", "nashi" });   // Insert at start
+    words.Remove ("melon");
+    words.RemoveAt (3);                         // Remove the 4th element
+    words.RemoveRange (0, 2);                   // Remove first 2 elements
+    // Remove all strings starting in 'n':
+    words.RemoveAll (s => s.StartsWith ("n"));
+    Console.WriteLine (words [0]);                          // first word
+    Console.WriteLine (words [words.Count - 1]);            // last word
+    foreach (string s in words) Console.WriteLine (s);      // all words
+    List<string> subset = words.GetRange (1, 2);            // 2nd->3rd words
+    string[] wordsArray = words.ToArray();    // Creates a new typed array
+    // Copy first two elements to the end of an existing array:
+    string[] existing = new string [1000];
+    words.CopyTo (0, existing, 998, 2);
+    List<string> upperCastWords = words.ConvertAll (s => s.ToUpper());
+    List<int> lengths = words.ConvertAll (s => s.Length);
+
+非泛型的ArrayList类主要用于与框架1.x的代码兼容，并且需要笨拙的转换，如下面的代码所示：
+
+.. code:: csharp
+
+    ArrayList al = new ArrayList();
+    al.Add ("hello");
+    string first = (string) al [0];
+    string[] strArr = (string[]) al.ToArray (typeof (string));
+
+这些转换并能通过编译器验证；下面的代码可以成功编译但是会在运行时失败：
+
+int first = (int) al [0]; // Runtime exception
+
+如果我们引入System.Linq名字空间，我们可以通过调用Cast与ToList来将ArrayList转换为泛型List：
+
+.. code:: csharp
+
+    ArrayList al = new ArrayList();
+    al.AddRange (new[] { 1, 5, 9 } );
+    List<int> list = al.Cast<int>().ToList();
+
+Cast与ToList是System.Linq.Enumerable类中的扩展方法，由.NET框架3.5所支持。
+
+LinkedList
+~~~~~~~~~~
+
+LinkedList是一个泛型双向链表。双向链表是一个节点链，其中的每一个节点指向前面的节点，后面的节点以及实际的元素。其主要优点在于元素可以被高效的插入到列表中的任意位置，因为他只涉及到创建一个新的节点并且更某些引用。然而，确定在哪里插入节点会非常慢，因为并没有固有的机制来直接索引链表；必须遍历每一个节点，而且二分查找是不可能的。
+
+LinkedList实现了IEnumerable与ICollection（以及他们的非泛型版本），但是没有实现IList，因为通过索引访问并不被支持。列表节点通过下列类实现：
+
+.. code:: csharp
+
+    public sealed class LinkedListNode<T>
+    {
+      public LinkedList<T> List { get; }
+      public LinkedListNode<T> Next { get; }
+      public LinkedListNode<T> Previous { get; }
+      public T Value { get; set; }
+    }
+
+当添加节点时，我们可以相对于其他节点指定位置或是在列表的开头与结束处插入。LinkedList提供了下列方法来插入节点：
+
+.. code:: csharp
+
+    public void AddFirst(LinkedListNode<T> node);
+    public LinkedListNode<T> AddFirst (T value);
+    public void AddLast (LinkedListNode<T> node);
+    public LinkedListNode<T> AddLast (T value);
+    public void AddAfter (LinkedListNode<T> node, LinkedListNode<T> newNode);
+    public LinkedListNode<T> AddAfter (LinkedListNode<T> node, T value);
+    public void AddBefore (LinkedListNode<T> node, LinkedListNode<T> newNode);
+    public LinkedListNode<T> AddBefore (LinkedListNode<T> node, T value);
+
+.. figure:: csharp_7_4.png
+   :alt: csharp_7_4.png
+
+   csharp\_7\_4.png
+类似的方法被提供用来删除元素：
+
+.. code:: csharp
+
+    public void Clear();
+    public void RemoveFirst();
+    public void RemoveLast();
+    public bool Remove (T value);
+    public void Remove (LinkedListNode<T> node);
+
+LinkedList具有一个跟踪列表中元素数目以及列表头与列表尾的内部域。他们通过下列的公开属性向外界公开：
+
+.. code:: csharp
+
+    public int Count { get; }                      // Fast
+    public LinkedListNode<T> First { get; }        // Fast
+    public LinkedListNode<T> Last { get; }         // Fast
+
+LinkedList同时支持下列的搜索方法（每一个方法都要求列表是可枚举的）：
+
+.. code:: csharp
+
+    public bool Contains (T value);
+    public LinkedListNode<T> Find (T value);
+    public LinkedListNode<T> FindLast (T value);
+
+最后，LinkedList支持拷贝到数组用于索引处理以及获取枚举器来支持foreach语句：
+
+.. code:: csharp
+
+    public void CopyTo (T[] array, int index);
+    public Enumerator<T> GetEnumerator();
+
+下面演示了LinkedList的使用：
+
+.. code:: csharp
+
+    var tune = new LinkedList<string>();
+    tune.AddFirst ("do");                           // do
+    tune.AddLast ("so");                            // do - so
+    tune.AddAfter (tune.First, "re");               // do - re - so
+    tune.AddAfter (tune.First.Next, "mi");          // do - re - mi - so
+    tune.AddBefore (tune.Last, "fa");               // do - re - mi - fa - so
+    tune.RemoveFirst();                             // re - mi - fa - so
+    tune.RemoveLast();                              // re - mi - fa
+    LinkedListNode<string> miNode = tune.Find ("mi");
+    tune.Remove (miNode);                           // re - fa
+    tune.AddFirst (miNode);                         // mi - re - fa
+    foreach (string s in tune) Console.WriteLine (s);
+
+Queue与Queue
+~~~~~~~~~~~~
+
+Queue与Queue是先进先出（FIFO）的数据结构，提供了Enqueue（添加一个元素到队列尾）与Dequeue（获取并删除队列头的元素）方法。同时提供了一个Peek方法来返回队列的元素，但是并不删除，以及一个Count属性（用于在删除之前检测所存在的元素）。
+
+尽管队列是可枚举的，他们并没有实现IList/IList，因为成员并不能直接通过索引进行访问。然而提供了一个ToArray方法用于将元素拷贝到一个数组，而后者可以进行随机访问：
+
+.. code:: csharp
+
+    public class Queue<T> : IEnumerable<T>, ICollection, IEnumerable
+    {
+      public Queue();
+      public Queue (IEnumerable<T> collection);   // Copies existing elements
+      public Queue (int capacity);                // To lessen auto-resizing
+      public void Clear();
+      public bool Contains (T item);
+      public void CopyTo (T[] array, int arrayIndex);
+      public int Count { get; }
+      public T Dequeue();
+      public void Enqueue (T item);
+      public Enumerator<T> GetEnumerator();       // To support foreach
+      public T Peek();
+      public T[] ToArray();
+      public void TrimExcess();
+    }
+
+下面的代码是一个使用Queue的示例：
+
+.. code:: csharp
+
+    var q = new Queue<int>();
+    q.Enqueue (10);
+    q.Enqueue (20);
+    int[] data = q.ToArray();         // Exports to an array
+    Console.WriteLine (q.Count);      // "2"
+    Console.WriteLine (q.Peek());     // "10"
+    Console.WriteLine (q.Dequeue());  // "10"
+    Console.WriteLine (q.Dequeue());  // "20"
+    Console.WriteLine (q.Dequeue());  // throws an exception (queue empty)
+
+队列在内部使用一个尺寸在需要可以调整的数组来实现的，非常类似于泛型List类。队列维护直接指向头元素与尾元素的索引；所以插入队列与删除队列是非常快速的操作（除了内部尺寸需要调整时）。
+
+Stack与Stack
+~~~~~~~~~~~~
+
+Stack与Stack是后进先出（LIFO）的数据结构，提供了Push（将元素压入到栈顶）与Pop（由栈顶获取并移除元素）方法。同时提供不具有破坏性的Peek方法以及Count属性与导出数据用于随机访问的ToArray方法：
+
+.. code:: csharp
+
+    public class Stack<T> : IEnumerable<T>, ICollection, IEnumerable
+    {
+      public Stack();
+      public Stack (IEnumerable<T> collection);   // Copies existing elements
+      public Stack (int capacity);                // Lessens auto-resizing
+      public void Clear();
+      public bool Contains (T item);
+      public void CopyTo (T[] array, int arrayIndex);
+      public int Count { get; }
+      public Enumerator<T> GetEnumerator();       // To support foreach
+      public T Peek();
+      public T Pop();
+      public void Push (T item);
+      public T[] ToArray();
+      public void TrimExcess();
+    }
+
+下面的代码演示了Stack的使用示例：
+
+.. code:: csharp
+
+    var s = new Stack<int>();
+    s.Push (1);                      //            Stack = 1
+    s.Push (2);                      //            Stack = 1,2
+    s.Push (3);                      //            Stack = 1,2,3
+    Console.WriteLine (s.Count);     // Prints 3
+    Console.WriteLine (s.Peek());    // Prints 3,  Stack = 1,2,3
+    Console.WriteLine (s.Pop());     // Prints 3,  Stack = 1,2
+    Console.WriteLine (s.Pop());     // Prints 2,  Stack = 1
+    Console.WriteLine (s.Pop());     // Prints 1,  Stack = <empty>
+    Console.WriteLine (s.Pop());     // throws exception
+
+与Queue和List类似，栈在内部使用尺寸在需要可以调整的数组来实现。
+
+BitArray
+~~~~~~~~
+
+BitArray是一个紧凑bool值的动态尺寸集合。他要比一个简单的bool数组与一个bool的泛型List更节省内存，因为对于每个值他只有一位来表示，否则每一个bool类型要占一个字节：
+
+.. code:: csharp
+
+    public sealed class BitArray : ICollection, IEnumerable, ICloneable
+    {
+      // Constructors
+      public BitArray (BitArray bits);    // An existing BitArray to copy
+      public BitArray (int length);       // Capacity, in bits
+      public BitArray (bool[] values);
+      public BitArray (byte[] bytes);
+      public BitArray (int[] values);
+      public BitArray (int length, bool defaultValue);
+      // To get/set value
+      public bool this [int index] { get; set; }
+      public bool Get  (int index);
+      public void Set  (int index, bool value);
+      public void SetAll (bool value);
+      // Bitwise operators
+      public BitArray Not();
+      public BitArray And (BitArray value);
+      public BitArray Or  (BitArray value);
+      public BitArray Xor (BitArray value);
+      // Copying
+      public void CopyTo (Array array, int index);
+      public object Clone();
+      // Other
+      public IEnumerator GetEnumerator();
+      public int  Count          { get; }
+      public int  Length         { get; set; }
+      public bool IsReadOnly     { get; }
+      public bool IsSynchronized { get; }
+      public object SyncRoot     { get; }
+    }
+
+下面的代码是一个BitArray类：
+
+.. code:: csharp
+
+    var bits = new BitArray(2);
+    bits[1] = true;
+    bits.Xor (bits);               // Bitwise exclusive-OR bits with itself
+    Console.WriteLine (bits[1]);   // False
+
+HashSet新SortedSet
+~~~~~~~~~~~~~~~~~~
+
+HashSet与SortedSet分别是由.NET框架3.5与4.0所引入的新的泛型集合。他们具有下列特点：
+
+-  他们的Contains方法使用基于散列的查找可以快速执行
+-  他们不存储重复元素，并且会静默忽略添加重复元素的请求
+-  我们不可以通过位置访问元素
+
+SortedSet顺序保存元素，而HashSet则不会。
+
+HashSet是使用一个只存储键的散列表来实现的；SortedSet是使用红黑树来实现的。
+
+下面是HashSet的定义：
+
+.. code:: csharp
+
+    public class HashSet<T> : ICollection<T>, IEnumerable<T>, IEnumerable
+    {
+      // Constructors
+      public HashSet();
+      public HashSet (IEnumerable<T> collection);
+      public HashSet (IEqualityComparer<T> comparer);
+      public HashSet (IEnumerable<T> collection, IEqualityComparer<T> comparer);
+      // Testing for membership
+      public bool Contains (T item);
+      // Adding / removing
+      public bool Add    (T item);
+      public bool Remove (T item);
+      public int RemoveWhere (Predicate<T> match);
+      public void Clear();
+      // Set operations - destructive
+      public void UnionWith           (IEnumerable<T> other);   // Adds
+      public void IntersectWith       (IEnumerable<T> other);   // Removes
+      public void ExceptWith          (IEnumerable<T> other);   // Removes
+      public void SymmetricExceptWith (IEnumerable<T> other);   // Removes
+      // Set operations - bool
+      public bool IsSubsetOf         (IEnumerable<T> other);
+      public bool IsProperSubsetOf   (IEnumerable<T> other);
+      public bool IsSupersetOf       (IEnumerable<T> other);
+      public bool IsProperSupersetOf (IEnumerable<T> other);
+      public bool Overlaps           (IEnumerable<T> other);
+      public bool SetEquals          (IEnumerable<T> other);
+      // Other
+      public int Count { get; }
+      public IEqualityComparer<T> Comparer { get; }
+      public void CopyTo (T[] array);
+      public void CopyTo (T[] array, int arrayIndex);
+      public void CopyTo (T[] array, int arrayIndex, int count);
+      public void TrimExcess();
+      public static IEqualityComparer<HashSet<T>> CreateSetComparer();
+    }
+
+SortedSet是提供相同成员集合的基础上，还提供了下列成员：
+
+.. code:: csharp
+
+    public virtual SortedSet<T> GetViewBetween (T lowerValue, T upperValue)
+    public IEnumerable<T> Reverse()
+    public T Min { get; }
+    public T Max { get; }
+
+SortedSet同时在其构造器中接受一个可选的IComparer（并不是相等比较器）。
+
+下面的代码由一个已存在的集合构建一个HashSet，测试其成员关系，并在集合上进行枚举（注意没有重复元素）：
+
+.. code:: csharp
+
+    var letters = new HashSet<char> ("the quick brown fox");
+    Console.WriteLine (letters.Contains ('t'));      // true
+    Console.WriteLine (letters.Contains ('j'));      // false
+    foreach (char c in letters) Console.Write (c);   // the quickbrownfx
+
+（我们可以向HashSet的构造器传递string的原因是因为string实现了IEnumerable）
+
+下面是相同的字符串载入SortedSet中的示例：
+
+.. code:: csharp
+
+    var letters = new SortedSet<char> ("the quick brown fox");
+    foreach (char c in letters) Console.Write (c);   //  bcefhiknoqrtuwx
+
+继续这个示例，我们可以获得f与j之间字符，如下所示：
+
+.. code:: csharp
+
+    foreach (char c in letters.GetViewBetween ('f', 'j'))
+      Console.Write (c);                                    //  fhk
+
+破坏性的集合操作符修改原始集合。UnionWith将第二个集合中的所有元素添加到原始集合中（排除重复元素）。IntersectsWith移除没有同时存在于两个集合中的元素。在下面的代码中我们由我们的字符集合中移除了所有的元音字符：
+
+.. code:: csharp
+
+    var letters = new HashSet<char> ("the quick brown fox");
+    letters.IntersectWith ("aeiou");
+    foreach (char c in letters) Console.Write (c);     // euio
+
+ExceptWith由原始集合中移除指定的元素。在这里，我们由集合中去掉所有的元音字符：
+
+.. code:: csharp
+
+    var letters = new HashSet<char> ("the quick brown fox");
+    letters.ExceptWith ("aeiou");
+    foreach (char c in letters) Console.Write (c);     // th qckbrwnfx
+
+SymmetricExceptWith移除除唯一属于一个集合之外的元素之外的所有元素：
+
+.. code:: csharp
+
+    var letters = new HashSet<char> ("the quick brown fox");
+    letters.SymmetricExceptWith ("the lazy brown fox");
+    foreach (char c in letters) Console.Write (c);     // quicklazy
+
+因为HashSet与SortedSet实现了IEnumerable，我们可以使用另一个集合作为任意集合操作方法的参数。
+
+字典
+----
+
+字典是一个集合，其中每一个元素是一个键值对。字典最经常用于查找与有序列表。
+
+框架通过IDictionary与IDictionary为了字典定义了标准协议，以及一个通用的字典类集合。类之间的区别主要有以下几点：
+
+-  元素是否以有序序列存储
+-  元素是否可以通过位置（索引）以及键进行访问
+-  是否为泛型
+-  当尺寸较大的性能
+
+表7-1总结所有的字典类以及他们在以上几方面的区别。性能以毫秒计数，是在一个1.5GHz的PC上，在一个整数键值的字典上执行50000操作得出的。（在使用相同底层集合结构的泛型与非泛型版本之间的区别是由于装箱造成的，并且只显示了值类型元素。）
+
+.. figure:: csharp_table_7_1.png
+   :alt: csharp_table_7_1.png
+
+   csharp\_table\_7\_1.png
+以大O的概念来看，按键获取的时间如下：
+
+-  Hashtable，Dictionary以及OrderedDictionary为O(1)
+-  SortedDictionary与SortedList为O(logn)
+-  ListDictionary（以及非字典类型例如List）为O(n)
+
+其中n为集合中的元素数目。
+
+IDictionary
+~~~~~~~~~~~
+
+IDictionary为所有基于键值的集合定义了标准协议。他通过添加了基于任意类型的键访问元素的方法与属性扩展了ICollection：
+
+.. code:: csharp
+
+    public interface IDictionary <TKey, TValue> :
+      ICollection <KeyValuePair <TKey, TValue>>, IEnumerable
+    {
+       bool ContainsKey (TKey key);
+       bool TryGetValue (TKey key, out TValue value);
+       void Add         (TKey key, TValue value);
+       bool Remove      (TKey key);
+       TValue this [TKey key]      { get; set; }  // Main indexer - by key
+       ICollection <TKey> Keys     { get; }       // Returns just keys
+       ICollection <TValue> Values { get; }       // Returns just values
+    }
+
+要向字典添加元素，我们可以调用Add方法或是使用索引的set访问器－后者会在键不存在的情况下向字典添加元素（如果存在则更新元素）。在所有的字典实现中，重复键是被禁止的，所以使用相同的键调用两次Add会抛出异常。
+
+要由字典中获取元素，使用索引器或是TryGetValue方法。如果键不存在，索引器会抛出异常，而TryGetValue会返回false。我们可以通过显式调用ContainsKey来测试成员关系；然而，如果我们随后读取元素则会产生两次查询的代价。
+
+直接在IDictionary上枚举会返回一个KeyValuePair结构序列：
+
+.. code:: csharp
+
+    public struct KeyValuePair <TKey, TValue>
+    {
+      public TKey Key     { get; }
+      public TValue Value { get; }
+    }
+
+我们可以通过字典的Keys/Values属性只在键或是只在值上枚举。
+
+在下面的内容中我们会使用泛型的Dictionary类来演示这个接口的用法。
+
+IDictionary
+~~~~~~~~~~~
+
+除了两个重要的功能不同以外，非泛型的IDictionary在原则上与IDictionary相同。清楚这些不同是很重要的，因为IDictionary出现在遗留代码中（包括.NET框架本身）：
+
+-  通过索引器获取不存在的键会返回null（而不是抛出异常）
+-  Contains测试成员关系，而不是ContainsKey
+
+在非泛型的IDictionary上枚举返回一个DictionaryEntry结构序列：
+
+.. code:: csharp
+
+    public struct DictionaryEntry
+    {
+      public object Key   { get; set; }
+      public object Value { get; set; }
+    }
+
+Dictionary与Hashtable
+~~~~~~~~~~~~~~~~~~~~~
+
+泛型Dictionary类是最经常用到的类之一（与List集合）。他使用散列表数据结构来存储键与值，且其快速高效。
+
+Dictionary同时实现了泛型与非泛型的IDictionary接口，泛型IDictionary向外公开。事实上，Dictionary是泛型IDictionary的“教科书”实现。
+
+下面的代码演示了如何来使用：
+
+.. code:: csharp
+
+    var d = new Dictionary<string, int>();
+    d.Add("One", 1);
+    d["Two"] = 2;     // adds to dictionary because "two" not already present
+    d["Two"] = 22;    // updates dictionary because "two" is now present
+    d["Three"] = 3;
+    Console.WriteLine (d["Two"]);                // Prints "22"
+    Console.WriteLine (d.ContainsKey ("One"));   // true (fast operation)
+    Console.WriteLine (d.ContainsValue (3));     // true (slow operation)
+    int val = 0;
+    if (!d.TryGetValue ("onE", out val))
+      Console.WriteLine ("No val");              // "No val" (case sensitive)
+    // Three different ways to enumerate the dictionary:
+    foreach (KeyValuePair<string, int> kv in d)          //  One ; 1
+      Console.WriteLine (kv.Key + "; " + kv.Value);      //  Two ; 22
+                                                         //  Three ; 3
+    foreach (string s in d.Keys) Console.Write (s);      // OneTwoThree
+    Console.WriteLine();
+    foreach (int i in d.Values) Console.Write (i);       // 1223
+
+其底层的散列表是通过将每一个元素的键转换为一个整数散列值－一个伪唯一值－然后应该用算法将散列值转换散列键来起作用的。这个散列值用来在内部确定一个对象属性于哪一“桶”。如果该
+位置包含多个值，则在该位置上执行线性搜索。散列表通常由1:1的桶与值比率开始（1:1负载因子），意味着每一个位置只包含一个值。然而，随着更多的元素被添加到散列表中，负载因子会以一种精心设计来优化插入与读取性能以及内存需求的方式动态增长。
+
+字典可以处理任意类型的键，只要他能够确定键与相应的散列值的相等关系。默认情况下，通过键的object.Equals方法来确定相等关系，而伪唯一的散列值是通过键的GetHashCode方法来获得的。这种行为可以通过重写这些方法或是通过在构造字典时提供一个IEqualityComparer对象来修改。这种方法的一个应用是当使用字符串键时指定一个大小写不敏感的比较器：
+
+var d = new Dictionary (StringComparer.OrdinalIgnoreCase);
+
+类似于许多其他的集合类型，字典的性能可以通过在构造器中指定所期望的集合尺寸进行改善，从而避免或是减少在内部调整尺寸的操作。
+
+非泛型版本名为HashTable，并且与其泛型版本在功能上类似，所不同的是他阻止公开我们在前面所讨论的非泛型IDictionary接口。
+
+Dictionary与Hashtable的缺点就是其元素并没有被排序。而且元素被添加的原始顺序也没有被保留。与所有的字典类似，重复的键是不允许的。
+
+OrderedDictionary
+~~~~~~~~~~~~~~~~~
+
+OrderedDictionary是一个以元素被添加的顺序维度元素的非泛型字典。使用OrderedDictioanry，我们可以通过索引或是键来访问元素。
+
+OrderedDictionary是Hashtable与ArrayList的组合。这就意味着他具有Hashtable的所有功能，同时具有例如RemoveAt以及整数索引器的功能。他同时公开了以其原始顺序返回元素的Keys与Values属性。
+
+这个类是在.NET 2.0中引入的，而且并没有泛型版本。
+
+ListDictionary与HybridDictionary
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ListDictionary使用一个链表存储底层数据。他并没有提供排序，但是却保持了元素的原始顺序。ListDictionary对于大列表十分慢。他只声明对于小列表（小于10个元素）的高效。
+
+HybridDictionary是在到达特定的尺寸时自动转换为Hashtable的ListDictionary，从而来解决ListDictionary的性能问题。其思想在字典很小时占用较少的内存，而字典变大时获得较好的性能。然而，在指定转换负载的情况下－而事实上Dictionary在两种场景中并不十分沉重或是慢－由Dictionary开始并非不合理。
+
+两个类都只有非泛型形式。
+
+有序字典
+~~~~~~~~
+
+框架提供了两种在内部按键对其内容进行排序的字典类：
+
+-  SortedDictionary
+-  SortedList
+
+（在本节中我们会简写为或是<,>）
+
+SortedDictionary<,>使用红黑树：一种被设计用来在元素插入与元素读取场景中保持一致性能的数据结构。
+
+SortedList<,>在内部使用有序数组对实现，提供快速调取（通过二分查找）但是较差的插入性能（因为已存在的值必须移动来为新元素提供空间）。
+
+在随机序列中插入元素方法（特别是大列表），SortedDictionary<,>要快于SortedList<,>。然而，SortedList<,>具有其他的能力：通过索引或是键访问元素。对于有序列表，我们可以直接到达到有序序列中的第n个元素（通过Keys/Values属性上的索引器）。要使用SortedDictionary<,>执行相同的操作，我们必须在n个元素上进行枚举。（或者是我们可以编写一个组合了有序字典与列表类的新类。）
+
+这三个集合都不允许重复键。
+
+下面的示例使用反射将定义在System.Object中的所有方法载入到一个以名字为键的有序列表中，然后在其键与值上进行枚举：
+
+.. code:: csharp
+
+    // MethodInfo is in the System.Reflection namespace
+
+    var sorted = new SortedList <string, MethodInfo>();
+    foreach (MethodInfo m in typeof (object).GetMethods())
+      sorted [m.Name] = m;
+    foreach (string name in sorted.Keys)
+      Console.WriteLine (name);
+    foreach (MethodInfo m in sorted.Values)
+      Console.WriteLine (m.Name + " returns a " + m.ReturnType);
+
+下面是第一次枚举的结果：
+
+.. code:: csharp
+
+    Equals
+    GetHashCode
+    GetType
+    ReferenceEquals
+    ToString
+
+下面是第二次枚举的结果：
+
+.. code:: csharp
+
+    Equals returns a System.Boolean
+    GetHashCode returns a System.Int32
+    GetType returns a System.Type
+    ReferenceEquals returns a System.Boolean
+    ToString returns a System.String
+
+注意，我们通过索引器来填充字典。如果我们使用Add方法插入，则会抛出异常，因为我们反射的类重载了Equals方法，而我们不能向字典中添加两次相同的键。通过使用索引器，后面的元素会覆盖前面的元素，从而可以避免这种错误。
+
+扩展我们的示例，下面的代码读取键为GetHashCode的MethodInfo，就如同普通的字典：
+
+Console.WriteLine (sorted ["GetHashCode"]); // Int32 GetHashCode()
+
+到目前为止，我们所做的一切都样适用于SortedDictionary<,>。然后下面的两行代码，读取最后的键与值，则只适用于有序列表：
+
+.. code:: csharp
+
+    Console.WriteLine (sorted.Keys  [sorted.Count - 1]);            // ToString
+    Console.WriteLine (sorted.Values[sorted.Count - 1].IsVirtual);  // True
+
+自定义集合与代理
+----------------
+
+前面几节中所讨论的集合类非常方便，因为他们可以被直接实例化，但是这些类不允许我们来控制当一个元素被添加或是由集合中移除元素时会发生什么。对于程序中的强类型集合，有时我们需要这种控制，例如：
+
+-  当元素被添加或是删除时触发事件
+-  由于添加或是删除了元素而进行属性更新
+-  检测一个合法的添加或删除操作并抛出异常
+
+.NET框架在System.Collections.ObjectModel名字空间为这种目的提供了相应的集合类。这些类本质上是代码或是实现了IList或是IDictionary<,>的包装器，通过将方法导向到底层的集合来实现。每个Add，Remove或是Clear操作是通过在重写时扮演网关角色的虚方法来实现的。
+
+可以自定义的集合类通常用于公开的集合中；例如在System.Windows.Form类上公开的控件集合。
+
+Collection与CollectionBase
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Collection类是List的可自定义的包装器。
+
+除了实现IList与IList，他定义了如下的四个虚方法以及受保护的属性：
+
+.. code:: csharp
+
+    public class Collection<T> :
+      IList<T>, ICollection<T>, IEnumerable<T>, IList, ICollection, IEnumerable
+    {
+       // ...
+       protected virtual void ClearItems();
+       protected virtual void InsertItem (int index, T item);
+       protected virtual void RemoveItem (int index);
+       protected virtual void SetItem (int index, T item);
+       protected IList<T> Items { get; }
+    }
+
+虚方法提供了网关，通过这个网关我们可以进行关联来改变或是加强列表的通常行为。受保护的Items属性允许实现者直接访问内层列表－这用来在内部进行变化而不需要触发虚方法。
+
+虚方法不需要被重写；他们可以保持不变，直到需要修改列表的默认行为。下面是一个演示Collection通常使用的示例：
+
+.. code:: csharp
+
+    public class Animal
+    {
+      public string Name;
+      public int Popularity;
+      public Animal (string name, int popularity)
+      {
+        Name = name; Popularity = popularity;
+      }
+    }
+    public class AnimalCollection : Collection <Animal>
+    {
+      // AnimalCollection is already a fully functioning list of animals.
+      // No extra code is required.
+    }
+    public class Zoo   // The class that will expose AnimalCollection.
+    {                  // This would typically have additional members.
+      public readonly AnimalCollection Animals = new AnimalCollection();
+    }
+    class Program
+    {
+      static void Main()
+      {
+        Zoo zoo = new Zoo();
+        zoo.Animals.Add (new Animal ("Kangaroo", 10));
+        zoo.Animals.Add (new Animal ("Mr Sea Lion", 20));
+        foreach (Animal a in zoo.Animals) Console.WriteLine (a.Name);
+      }
+    }
+
+正如其所表示的，AnimalCollection仅是一个简单的List而没有更多的功能；他的角色就是为未来的扩展提供一个基础。为了演示，我们将会向Animal添加一个Zoo属性，从而可以引用Zoo并重写Collection中的虚方法来自动维护属性：
+
+.. code:: csharp
+
+    public class Animal
+    {
+      public string Name;
+      public int Popularity;
+      public Zoo Zoo { get; internal set; }
+      public Animal(string name, int popularity)
+      {
+        Name = name; Popularity = popularity;
+      }
+    }
+    public class AnimalCollection : Collection <Animal>
+    {
+      Zoo zoo;
+      public AnimalCollection (Zoo zoo) { this.zoo = zoo; }
+     
+      protected override void InsertItem (int index, Animal item)
+      {
+        base.InsertItem (index, item);
+        item.Zoo = zoo;
+      }
+      protected override void SetItem (int index, Animal item)
+      {
+        base.SetItem (index, item);
+        item.Zoo = zoo;
+      }
+      protected override void RemoveItem (int index)
+      {
+        this [index].Zoo = null;
+        base.RemoveItem (index);
+      }
+      protected override void ClearItems()
+      {
+        foreach (Animal a in this) a.Zoo = null;
+        base.ClearItems();
+      }
+    }
+    public class Zoo
+    {
+      public readonly AnimalCollection Animals;
+      public Zoo() { Animals = new AnimalCollection (this); }
+    }
+
+Collection同时还有一个接受已存在的IList的构造器。与其他的集合类不同，所提供的列表被代理而不是被拷贝，意味着后续的变化会反映在包装的Collection中（尽管没有触发Collection的虚方法）。相应的，通过Collection所做的变化将会修改底层列表。
+
+**CollectionBase**
+
+CollectionBase是Collection的非泛型版本，在框架1.0中引入。他提供了与Collection相同的大多数特性，但是难于使用。CollectionBase并没有模板方法InsertItem，RemoveItem，SetItem与ClearItem，但是具有下列方法：OnInsert，OnInsertComplete，OnSet，OnSetComplete，OnRemove，OnRemoveComplete，OnClear，OnClearComplete。因为CollectionBase是非泛型的，当继承时我们必须实现类型方法，至少实现类型索引器与Add方法。
+
+KeyedCollection与DictionaryBase
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+KeyedCollection继承自Collection。他同时添加并减少了功能。所添加的是通过键访问元素的能力，非常类似于字典。所减少的是代码我们自己的内部列表的能力。
+

@@ -1,0 +1,2903 @@
+Chapter 4. Advanced C#
+======================
+
+在本章中，我们将会在前一章所探讨的概念的基础上探讨C#高级主题。我们应依次阅读前四节；我们可以任意阅读余下的章节。
+
+委托
+----
+
+委托自动将方法调用者与目标方法之间建立关联。委托包括两方面：类型与实例。委托类型定义了调用者与目标将要遵循的协议，组成一个参数类型与返回类型的列表。委托实例是一个指向一个（或多个）遵循协议的目标方法的对象。
+
+委托实例表面上作为调用者的委托：调用者调用委托，然后委托调用目标方法。这间接的分离了调用者与目标方法。
+
+委托类型声明以delegate关键字为前缀，但是类似于一个（抽象）方法声明。例如：
+
+delegate int Transformer (int x);
+
+要创建委托实例，我们可以将一个方法赋值给委托变量：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Main()
+      {
+        Transformer t = Square;          // Create delegate instance
+        int result = t(3);               // Invoke delegate
+        Console.WriteLine (result);      // 9
+      }
+      static int Square (int x) { return x * x; }
+    }
+
+调用委托类似于调用方法（因为委托的目的就是提供一种间接级别）：
+
+t(3);
+
+语句：
+
+Transformer t = Square;
+
+是下列语句的简写：
+
+Transformer t = new Transformer (Square);
+
+而
+
+t(3)
+
+是下列语句的简写：
+
+t.Invoke (3);
+
+使用委托编写插件方法
+~~~~~~~~~~~~~~~~~~~~
+
+委托变量可以动态的赋值为方法。这对于编写插件方法十分有用。在这个示例中，我们有一个名为Transform的实用方法，用来在一个整数数组中的每一个元素上应用转换。Transform方法有一个委托参数，用来指定插件转换。
+
+.. code:: csharp
+
+    public delegate int Transformer (int x);
+    class Util
+    {
+      public static void Transform (int[] values, Transformer t)
+      {
+        for (int i = 0; i < values.Length; i++)
+          values[i] = t (values[i]);
+      }
+    }
+    class Test
+    {
+      static void Main()
+      {
+        int[] values = { 1, 2, 3 };
+        Util.Transform (values, Square);      // Dynamically hook in Square
+        foreach (int i in values)
+          Console.Write (i + "  ");           // 1   4   9
+      }
+      static int Square (int x) { return x * x; }
+    }
+
+多播委托
+~~~~~~~~
+
+所有的委托实例都具有多播的功能。这就意味着一个委托实例不仅可以指向一个目标方法，而且可以指向一个目标方法列表。+与+=操作符可以组合委托实例。例如：
+
+.. code:: csharp
+
+    SomeDelegate d = SomeMethod1;
+    d += SomeMethod2;
+
+最后一行代码与下面的代码功能相同：
+
+d = d + SomeMethod2;
+
+现在调用d则会同时调用SomeMethod1与SomeMethod2。委托以他们被添加的顺序进行调用。
+
+在一个值为null的委托变量上调用+或是+=操作符也可以工作，而这种方式等同于为变量赋一个新值：
+
+.. code:: csharp
+
+    SomeDelegate d = null;
+    d += SomeMethod1;       // Equivalent (when d is null) to d = SomeMethod1;
+
+类似的，在具有一个目标的委托变量上调用-=操作符等同于将变量赋值为null。
+
+如果多播委托具有非空的返回类型，调用者可以由最后一个调用的方法获得返回值。之前的方法仍然被调用，但是他们的返回值为丢弃。在多播应用的大多数场景中，他们都具有void返回类型，所以不会出现这种细微之处。
+
+**多播委托示例**
+
+假定我们要编写一个需要较长时运行的例程。该例程通过调用委托来向调用者报告进度。在这个示例中，HardWord例程具有一个ProgressReport委托参数，调用该委托来显示进度：
+
+.. code:: csharp
+
+    public delegate void ProgressReporter (int percentComplete);
+    public class Util
+    {
+      public static void HardWork (ProgressReporter p)
+      {
+        for (int i = 0; i < 10; i++)
+        {
+          p (i * 10);                           // Invoke delegate
+          System.Threading.Thread.Sleep (100);  // Simulate hard work
+        }
+      }
+    }
+
+为了监视进度，Main方法创建一个多播委托实例p，从而进度是通过两个独立的方法来进行监视的：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Main()
+      {
+        ProgressReporter p = WriteProgressToConsole;
+        p += WriteProgressToFile;
+        Util.HardWork (p);
+      }
+      static void WriteProgressToConsole (int percentComplete)
+      {
+        Console.WriteLine (percentComplete);
+      }
+      static void WriteProgressToFile (int percentComplete)
+      {
+        System.IO.File.WriteAllText ("progress.txt",
+                                      percentComplete.ToString());
+      }
+    }
+
+实例与静态方法目标
+~~~~~~~~~~~~~~~~~~
+
+当一个委托对象被赋值给一个实例方法时，委托对象不仅要维护到方法的引用，而且要维护到方法所属的实例的引用。System.Delegate类的Target属性表示这个实例（对于引用静态方法的委托为null）。例如：
+
+.. code:: csharp
+
+    public delegate void ProgressReporter (int percentComplete);
+    class Test
+    {
+      static void Main()
+      {
+        X x = new X();
+        ProgressReporter p = x.InstanceProgress;
+        p(99);                                 // 99
+        Console.WriteLine (p.Target == x);     // True
+        Console.WriteLine (p.Method);          // Void InstanceProgress(Int32)
+      }
+    }
+    class X
+    {
+      public void InstanceProgress (int percentComplete)
+      {
+        Console.WriteLine (percentComplete);
+      }
+    }
+
+泛型委托类型
+~~~~~~~~~~~~
+
+一个委托类型可以包含泛型类型参数。例如：
+
+public delegate T Transformer (T arg);
+
+使用这个定义，我们可以编写适用于任意类型的泛型化的实用方法：
+
+.. code:: csharp
+
+    public class Util
+    {
+      public static void Transform<T> (T[] values, Transformer<T> t)
+      {
+        for (int i = 0; i < values.Length; i++)
+          values[i] = t (values[i]);
+      }
+    }
+    class Test
+    {
+      static void Main()
+      {
+        int[] values = { 1, 2, 3 };
+        Util.Transform (values, Square);      // Dynamically hook in Square
+        foreach (int i in values)
+          Console.Write (i + "  ");           // 1   4   9
+      }
+      static int Square (int x) { return x * x; }
+    }
+
+Func与Action委托
+~~~~~~~~~~~~~~~~
+
+使用泛型委托，编写足够通用适用于任意返回类型与任意数目参数的方法的委托类型集合成为可能。这些委托就是定义在System名字空间中的Func与Action委托：
+
+.. code:: csharp
+
+    delegate TResult Func <out TResult>                ();
+    delegate TResult Func <in T, out TResult>          (T arg);
+    delegate TResult Func <in T1, in T2, out TResult>  (T1 arg1, T2 arg2);
+    ... and so on, up to T16
+    delegate void Action                 ();
+    delegate void Action <in T>          (T arg);
+    delegate void Action <in T1, in T2>  (T1 arg1, T2 arg2);
+    ... and so on, up to T16
+
+这些委托极其通用。我们前面示例中的Transform委托可以使用需要一个类型T参数并且返回相同类型值的Func委托来替换：
+
+.. code:: csharp
+
+    public static void Transform<T> (T[] values, Func<T,T> transformer)
+    {
+      for (int i = 0; i < values.Length; i++)
+        values[i] = transformer (values[i]);
+    }
+
+这些委托唯一没有覆盖的实际场景就是ref/out与指针参数。
+
+委托与接口
+~~~~~~~~~~
+
+委托可以解决的问题也可以由接口来解决。例如，下列的代码显示了如何使用ITransformer接口来解决我们的过滤问题：
+
+.. code:: csharp
+
+    public interface ITransformer
+    {
+      int Transform (int x);
+    }
+    public class Util
+    {
+     public static void TransformAll (int[] values, ITransformer t)
+     {
+       for (int i = 0; i < values.Length; i++)
+         values[i] = t.Transform (values[i]);
+     }
+    }
+    class Squarer : ITransformer
+    {
+      public int Transform (int x) { return x * x; }
+    }
+    ...
+    static void Main()
+    {
+      int[] values = { 1, 2, 3 };
+      Util.TransformAll (values, new Squarer());
+      foreach (int i in values)
+        Console.WriteLine (i);
+    }
+
+如果下列条件中的一个或是多个为真，则选择设计委托要优于选择设计接口中：
+
+-  接口只定义一个方法
+-  需要多播功能
+-  订阅者需要多次实现接口
+
+在ITransformer示例中，我们并不需要多播。然而接口只定义了一个方法。而且，我们的订阅者需要多次实现ITransformer来支持不同的转换，例如平方或是立方。使用接口，我们被强制为每一个转换编写一个单独的类型，因为Test只能实现ITransformer一次。这是十分麻烦的：
+
+.. code:: csharp
+
+    class Squarer : ITransformer
+    {
+      public int Transform (int x) { return x * x; }
+    }
+    class Cuber : ITransformer
+    {
+      public int Transform (int x) {return x * x * x; }
+    }
+    ...
+    static void Main()
+    {
+      int[] values = { 1, 2, 3 };
+      Util.TransformAll (values, new Cuber());
+      foreach (int i in values)
+        Console.WriteLine (i);
+    }
+
+委托兼容
+~~~~~~~~
+
+**类型兼容**
+
+委托类型彼此之间是不兼容的，尽管他们的签名也许相同：
+
+.. code:: csharp
+
+    delegate void D1();
+    delegate void D2();
+    ...
+    D1 d1 = Method1;
+    D2 d2 = d1;                           // Compile-time error
+
+注，然而下面的代码是允许的：
+
+D2 d2 = new D2 (d1);
+
+如果委托实例具有方法目标，则认为他们是相等的：
+
+.. code:: csharp
+
+    delegate void D();
+    ...
+    D d1 = Method1;
+    D d2 = Method1;
+    Console.WriteLine (d1 == d2);         // True
+
+对于多播委托，如果我们以相同的顺序指向相同的目标，则认为他们是相等的。
+
+**参数兼容性**
+
+当我们调用一个方法时，我们可以提供比方法的参数更为特殊化的类型的参数。这是普通的多态行为。由于相同的原因，委托也可以具有比其方法目标更为特殊的参数类型。这被称之为逆变性。
+
+如下面的示例：
+
+.. code:: csharp
+
+    delegate void StringAction (string s);
+    class Test
+    {
+      static void Main()
+      {
+        StringAction sa = new StringAction (ActOnObject);
+        sa ("hello");
+      }
+      static void ActOnObject (object o)
+      {
+        Console.WriteLine (o);   // hello
+      }
+    }
+
+委托不会以其他的角色调用方法。在这个示例中，StringAction被使用string类型的参数进行调用。当参数到达目标方法时，参数会隐式的向上转换为object。
+
+**返回类型兼容**
+
+如果我们调用一个方法，我们也许会获得一个比我们所要求的更为特殊的类型。这是普通的多态行为。由于同样的原因，委托的返回类型可以比其目标方法的返因类型更为宽泛。例如：
+
+.. code:: csharp
+
+    delegate object ObjectRetriever();
+    class Test
+    {
+      static void Main()
+      {
+        ObjectRetriever o = new ObjectRetriever (RetriveString);
+        object result = o();
+        Console.WriteLine (result);      // hello
+      }
+      static string RetriveString() { return "hello"; }
+    }
+
+ObjectRetriever希望返回一个object，但是object的子类也可以：委托返回类型是协变的。
+
+**泛型委托类型参数变化（C# 4.0）**
+
+在第3章中我们了解了泛型接口如何支持协变与逆变类型参数。委托也存在同样的功能。
+
+如果我们定义一个泛型委托类型，良好的实践是：
+
+-  将只用作返回值的类型参数标记为协变的(out)
+-  将用在参数上的任意类型参数标记为逆变的(in)
+
+这样做可以使得通过考虑类型之间的继承关系而进行的转换更为自然。
+
+下面的委托（定义在System名字空间中）支持协变：
+
+delegate TResult Func();
+
+允许：
+
+.. code:: csharp
+
+    Func<string> x = ...;
+    Func<object> y = x;
+
+下列的委托（定义在System名字空间中）支持逆变：
+
+delegate void Action (T arg);
+
+允许：
+
+.. code:: csharp
+
+    Action<object> x = ...;
+    Action<string> y = x;
+
+事件
+----
+
+当使用委托时，通常会出现两种角色：广播者与订阅者。
+
+广播者是一个包含委托域的类型。广播者通过调用委托来决定何时广播。
+
+订阅者是一个方法目标容器。订阅者通过在广播者委托上调用+=与-=来决定何时启动与停止监听。订阅者并不知道其他的订阅者。
+
+事件是形成这种模式的语言特性。event是一个只公开广播者/订阅者模型所需要的委托特性子集的结构。事件的主要目的就是阻止订阅者彼此之间的干扰。
+
+声明事件最简单的方法是将event关键字放在委托成员的前面：
+
+.. code:: csharp
+
+    public class Broadcaster
+    {
+      public event ProgressReporter Progress;
+    }
+
+Broadcaster类型中的代码可以完全访问Progress，并且将其看作一个委托。Broadcaster之外的代码只能在Progress事件上执行+=与-=操作。
+
+考虑下面的示例。Stock类会在每次Stock的Price变化时触发PriceChanged事件：
+
+.. code:: csharp
+
+    public delegate void PriceChangedHandler (decimal oldPrice,
+                                              decimal newPrice);
+    public class Stock
+    {
+      string symbol;
+      decimal price;
+      public Stock (string symbol) { this.symbol = symbol; }
+      public event PriceChangedHandler PriceChanged;
+      public decimal Price
+      {
+        get { return price; }
+        set
+        {
+          if (price == value) return;      // Exit if nothing has changed
+          if (PriceChanged != null)        // If invocation list not empty,
+            PriceChanged (price, value);   // fire event.
+          price = value;
+        }
+      }
+    }
+
+如果我们由示例中移除event关键字，，那么PriceChanged就变为一个普通的委托域，我们的示例依然可以给出相同的结果。然而，Stock就会变得不稳健，因为订阅者可以执行下面的操作从而彼此之间进行干扰：
+
+-  通过重新赋值PriceChanged（而不是使用+=操作符）来替换其他的订阅者。
+-  清空所有的订阅者（通过将PriceChanged设置为null）。
+-  通过调用委托来向其他的订阅者广播。
+
+标准事件模式
+~~~~~~~~~~~~
+
+.NET框架为编写事件定义了一个标准模式。其目的是在框架与用户代码之间提供一致性。标准事件模式的核心是System.EventArgs：没有任何成员（而不是静态Empty属性）的预定义框架类。EventArgs是一个为事件传输信息的基类。在我们Stock的示例中，我们可以派生EventArgs在PriceChanged事件被触发时传送旧的与新的价格：
+
+.. code:: csharp
+
+    public class PriceChangedEventArgs : System.EventArgs
+    {
+      public readonly decimal LastPrice;
+      public readonly decimal NewPrice;
+     
+      public PriceChangedEventArgs (decimal lastPrice, decimal newPrice)
+      {
+        LastPrice = lastPrice;
+        NewPrice = newPrice;
+      }
+    }
+
+为了重用性，EventArgs子类通过其所包含的信息来命名（而是他将要使用的事件）。他通常通过或是只读域公开数据。
+
+有了EventArgs子类，接下来就是为事件选择或是定义一个委托。有三条规则：
+
+-  他必须是void返回类型
+-  他必须接受两个参数：第一个是object类型，而第二个EventArgs子类。第一个参数表示事件的广播者，而第二个参数包含要传递的额外信息。
+-  名字必须以EventHandler结尾。
+
+框架定义了一个名为System.EventHandler<>满足这些规则的泛型委托：
+
+.. code:: csharp
+
+    public delegate void EventHandler<TEventArgs>
+      (object source, TEventArgs e) where TEventArgs : EventArgs;
+
+接下来要定义一个所选委托类型的事件。在这里我们使用泛型EventHandler委托：
+
+.. code:: csharp
+
+    public class Stock
+    {
+      ...
+      public event EventHandler<PriceChangedEventArgs> PriceChanged;
+    }
+
+最手，模式要求我们编写一个触发事件的受保护的虚方法。名字必须与事件名字相匹配，以单词On前缀，并接受一个EventArgs参数：
+
+.. code:: csharp
+
+    public class Stock
+    {
+      ...
+      public event EventHandler<PriceChangedEventArgs> PriceChanged;
+      protected virtual void OnPriceChanged (PriceChangedEventArgs e)
+      {
+        if (PriceChanged != null) PriceChanged (this, e);
+      }
+    }
+
+这提供了一个中心点，由此子类可以调用或是重写事件。下面是一个复杂的示例：
+
+.. code:: csharp
+
+    using System;
+    public class PriceChangedEventArgs : EventArgs
+    {
+      public readonly decimal LastPrice;
+      public readonly decimal NewPrice;
+      public PriceChangedEventArgs (decimal lastPrice, decimal newPrice)
+      {
+        LastPrice = lastPrice; NewPrice = newPrice;
+      }
+    }
+    public class Stock
+    {
+      string symbol;
+      decimal price;
+      public Stock (string symbol) {this.symbol = symbol;}
+      public event EventHandler<PriceChangedEventArgs> PriceChanged;
+      protected virtual void OnPriceChanged (PriceChangedEventArgs e)
+      {
+        if (PriceChanged != null) PriceChanged (this, e);
+      }
+      public decimal Price
+      {
+        get { return price; }
+        set
+        {
+          if (price == value) return;
+          OnPriceChanged (new PriceChangedEventArgs (price, value));
+          price = value;
+        }
+      }
+    }
+    class Test
+    {
+      static void Main()
+      {
+        Stock stock = new Stock ("THPW");
+        stock.Price = 27.10M;
+        // Register with the PriceChanged event
+        stock.PriceChanged += stock_PriceChanged;
+        stock.Price = 31.59M;
+      }
+      static void stock_PriceChanged (object sender, PriceChangedEventArgs e)
+      {
+        if ((e.NewPrice - e.LastPrice) / e.LastPrice > 0.1M)
+          Console.WriteLine ("Alert, 10% stock price increase!");
+      }
+    }
+
+当事件并不包含额外的信息时，可以使用预定义的非泛型的EventHandler委托。在这个示例中，我们重写了Stock，从而PriceChanged事件会在价格变化之后触发，并且没有关于事件的必须信息，仅是事件发生了。我们同时利用了EventArgs.Empty属性来避免不必要的EventArgs实例的实例化。
+
+.. code:: csharp
+
+    public class Stock
+    {
+      string symbol;
+      decimal price;
+      public Stock (string symbol) { this.symbol = symbol; }
+      public event EventHandler PriceChanged;
+      protected virtual void OnPriceChanged (EventArgs e)
+      {
+        if (PriceChanged != null) PriceChanged (this, e);
+      }
+      public decimal Price
+      {
+        get { return price; }
+        set
+        {
+          if (price == value) return;
+          price = value;
+          OnPriceChanged (EventArgs.Empty);
+        }
+      }
+    }
+
+事件访问器
+~~~~~~~~~~
+
+事件的访问是其+=与-=功能的实现。默认情况下，访问器是编译器隐式实现的。考虑下面的事件声明：
+
+public event EventHandler PriceChanged;
+
+编译器将其转换为：
+
+-  一个私有的委托域
+-  一对公开的事件处理器函数，其实现将+=与-=操作转向私有的委托域
+
+我们可以通过定义显式的事件访问器来接管这一过程。下面是是我们前面示例中PriceChanged事件的手工实现：
+
+.. code:: csharp
+
+    private EventHandler _priceChanged;         // Declare a private delegate
+    public event EventHandler PriceChanged
+    {
+      add    { _priceChanged += value; }
+      remove { _priceChanged -= value; }
+    }
+
+这个示例在功能上与C#的默认访问器实现完全相同。通过定义我们自己的事件访问顺，我们指示C#不要生成默认的域与访问器逻辑。
+
+通过显式的事件访问器，我们可以在存储上应用更为复杂的策略并且访问底层委托。有三种有用的场景：
+
+-  当事件访问器仅是传递广播事件的另一个类时
+-  当类公开了大量的事件，而大多数时候只存在很少的订阅者，例如窗体控制。在这些情况下，最好是将订阅者的委托存储在一个字典中，因为字典要比大量的空委托域引用占用更少的空间。
+-  当显式实现声明事件的接口时
+
+下面是一个演示最后一点的例子：
+
+.. code:: csharp
+
+    public interface IFoo { event EventHandler Ev; }
+    class Foo : IFoo
+    {
+      private EventHandler ev;
+      event EventHandler IFoo.Ev
+      {
+        add    { ev += value; }
+        remove { ev -= value; }
+      }
+    }
+
+事件修饰符
+~~~~~~~~~~
+
+类似于方法，事件可以是virtual，override，abstract或是sealed。事件还可以是静态的：
+
+.. code:: csharp
+
+    public class Foo
+    {
+      public static event EventHandler<EventArgs> StaticEvent;
+      public virtual event EventHandler<EventArgs> VirtualEvent;
+    }
+
+Lambda表达式
+------------
+
+Lambda表达式是在委托实例内编写的未命名方法。编译器会立即将Lambda表达式转换为：
+
+-  委托实例
+-  Experssion类型的表达式树，以可遍历的对象模型的方式表示Lambda表达式中的代码。这可以使得Lambda表达式稍后在运行时解释。
+
+给定下列的委托类型：
+
+delegate int Transformer (int i);
+
+我们可以赋值并调用Lambda表达式x=>x\*x，如下所示：
+
+.. code:: csharp
+
+    Transformer sqr = x => x * x;
+    Console.WriteLine (sqr(3));    // 9
+
+Lambda表达式具有下列形式：
+
+(parameters) => expression-or-statement-block
+
+为了方便，当且仅当只有一个可推测的类型的参数时，我们可以忽略括号。
+
+在我们的示例中，只有一个参数x，而表达式是x\*x：
+
+x => x \* x;
+
+Lambda表达式的每一个参数与一个委托参数相对应，而表达式类型（也许为void）与委托的返回类型相对应。
+
+在我们的示例中，x与参数i相对应，而表达式x\*x与返回类型int相对应，所以与Transformer委托相兼容：
+
+delegate int Transformer (int i);
+
+Lambda表达式的代码可以是一个语句块，而不仅是一条语句。我们可以将我们的代码重写如下：
+
+x => { return x \* x; };
+
+Lambda表达式更通常用于Func与Action委托中，所以我们经常会看到我们前面的示例被编写为：
+
+Func sqr = x => x \* x;
+
+下面是接受两个参数的表达式示例：
+
+.. code:: csharp
+
+    Func<string,string,int> totalLength = (s1, s2) => s1.Length + s2.Length;
+    int total = totalLength ("hello", "world");   // total is 10;
+
+Lambda表达式在C# 3.0中引入。
+
+显式指定Lambda参数类型
+~~~~~~~~~~~~~~~~~~~~~~
+
+编译器通常可以推测Lambda表达式参数的类型。当不能推测时，我们必须为每一个参数显式指定类型。考虑下面的表达式：
+
+Func sqr = x => x \* x;
+
+编译器使用类型推测推测x为int。
+
+我们可以显式指定x的类型，如下所示：
+
+Func sqr = (int x) => x \* x;
+
+捕获外部变量（Outer Variables）
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Lambda表达式可以引用在方法内部所定义的变量与参数。例如：
+
+.. code:: csharp
+
+    static void Main()
+    {
+      int factor = 2;
+      Func<int, int> multiplier = n => n * factor;
+      Console.WriteLine (multiplier (3));           // 6
+    }
+
+由Lambda表达式所引用的外部变量被称之被捕获的变量。捕获变量的Lambda表达式称之为closure。
+
+被捕获的变量在委托实际被调用时才会进行计算，而不是变量被捕获时计算：
+
+.. code:: csharp
+
+    int factor = 2;
+    Func<int, int> multiplier = n => n * factor;
+    factor = 10;
+    Console.WriteLine (multiplier (3));           // 30
+
+Lambda表达式本身可以更新捕获的变量：
+
+.. code:: csharp
+
+    int seed = 0;
+    Func<int> natural = () => seed++;
+    Console.WriteLine (natural());           // 0
+    Console.WriteLine (natural());           // 1
+    Console.WriteLine (seed);                // 2
+
+被捕获变量的生命周期可以扩展到整个委托的生命周期。在下面的示例中，当Natural执行完成时，局部变量seed将会由作用域内消失。但是由于seed已被捕获，其生命周期会被扩展到捕获委托的生命周期，natural：
+
+.. code:: csharp
+
+    static Func<int> Natural()
+    {
+      int seed = 0;
+      return () => seed++;      // Returns a closure
+    }
+    static void Main()
+    {
+      Func<int> natural = Natural();
+      Console.WriteLine (natural());      // 0
+      Console.WriteLine (natural());      // 1
+    }
+
+在Lambda表达式内部实例化的局部变量对于委托实例的每次执行都是唯一的。如果我们重构之前的示例在Lambda表达式内部实例化seed，我们就会得到不同的结果：
+
+.. code:: csharp
+
+    static Func<int> Natural()
+    {
+      return() => { int seed = 0; return seed++; };
+    }
+    static void Main()
+    {
+      Func<int> natural = Natural();
+      Console.WriteLine (natural());           // 0
+      Console.WriteLine (natural());           // 0
+    }
+
+**捕获迭代变量**
+
+当我们在for与foreach语句内捕获迭代变量时，C#会将这些迭代变量看作是在循环之外声明的。这意味着相同的变量会在每一次迭代中被捕获。下面的程序会输出333而不是012：
+
+.. code:: csharp
+
+    Action[] actions = new Action[3];
+    for (int i = 0; i < 3; i++)
+      actions [i] = () => Console.Write (i);
+    foreach (Action a in actions) a();     // 333
+
+每一个闭包捕获相同的变量，i。当委托稍后被调用时，每一个委托在执行时所看到的i值是3。我们可以通过将for循环扩展为如下的样子来进行更好的演示：
+
+.. code:: csharp
+
+    Action[] actions = new Action[3];
+    int i = 0;
+    actions[0] = () => Console.Write (i);
+    i = 1;
+    actions[1] = () => Console.Write (i);
+    i = 2;
+    actions[2] = () => Console.Write (i);
+    i = 3;
+    foreach (Action a in actions) a();    // 333
+
+如果我们希望输出012，则解决方法是将迭代变量赋值给一个循环作用域内的局部变量：
+
+.. code:: csharp
+
+    Action[] actions = new Action[3];
+    for (int i = 0; i < 3; i++)
+    {
+      int loopScopedi = i;
+      actions [i] = () => Console.Write (loopScopedi);
+    }
+    foreach (Action a in actions) a();     // 012
+
+这会使得闭包在每次迭代时捕获不同的变量。
+
+匿名方法
+--------
+
+匿名方法是C#2.0特性，但已在很大程度上为C#3.0所包含。匿名方法类似于Lambda表达式，但是缺少下列特性：
+
+-  隐匿类型参数
+-  表达式语法（匿名方法必须总是一个语句块）
+-  通过赋值给Expression编译为表达式树的能力
+
+要编写匿名方法，我们包含delegate关键字，后跟参数声明，然后是方法体。例如，给定下列委托：
+
+delegate int Transformer (int i);
+
+我们可以像下面这样编写并调用匿名方法：
+
+.. code:: csharp
+
+    Transformer sqr = delegate (int x) {return x * x;};
+    Console.WriteLine (sqr(3));                            // 9
+
+第一行在语义上等同于下面的Lambda表达式：
+
+Transformer sqr = (int x) => {return x \* x;};
+
+或是简单的：
+
+Transformer sqr = x => x \* x;
+
+匿名方法的唯一特性就是我们可以忽略整个参数声明-尽管委托需要这些声明。这在使用默认空处理器的声明事件中会很有用：
+
+public event EventHandler Clicked = delegate { };
+
+这避免了在触发事件前的空检测。下面的语句也是合法的：
+
+Clicked += delegate { Console.WriteLine ("clicked"); }; // No parameters
+
+匿名方法使用与Lambda表达式相同的方式来捕获外部变量。
+
+try语句与异常
+-------------
+
+try语句指定了以错误处理或清理代码为目的的代码块。try块后必须跟随catch块，finally块，或是两者。catch块会在try块中发生错误时执行。finally块会在执行离开try块时执行（或catch块）来执行清理代码，而无论是否发生错误。
+
+catch块可以访问包含关于错误信息的Exception对象。我们使用catch块或者补偿，或者重新抛出异常。如果我们仅是错词记录问题日志，或是如果我们希望重新抛出一个新的，更高级别的异常类型，我们可以重新抛出异常。
+
+finally块通过任意情况下的确定执行为我们的程序添加了确定性。他对于如关闭网络连接这样的清理任务非常有用。
+
+try语句如下所示：
+
+.. code:: csharp
+
+    try
+    {
+      ... // exception may get thrown within execution of this block
+    }
+    catch (ExceptionA ex)
+    {
+      ... // handle exception of type ExceptionA
+    }
+    catch (ExceptionB ex)
+    {
+      ... // handle exception of type ExceptionB
+    }
+    finally
+    {
+      ... // cleanup code
+    }
+
+考虑下面的程序：
+
+.. code:: csharp
+
+    class Test
+    {
+      static int Calc (int x) { return 10 / x; }
+      static void Main()
+      {
+        int y = Calc (0);
+        Console.WriteLine (y);
+      }
+    }
+
+因为x为0，运行时会抛出DivideByZeronException，并且程序终止。我们可以通过像下面这样捕获异常来进行避免：
+
+.. code:: csharp
+
+    class Test
+    {
+      static int Calc (int x) { return 10 / x; }
+      static void Main()
+      {
+        try
+        {
+          int y = Calc (0);
+          Console.WriteLine (y);
+        }
+        catch (DivideByZeroException ex)
+        {
+          Console.WriteLine ("x cannot be zero");
+        }
+        Console.WriteLine ("program completed");
+      }
+    }
+
+输出结果如下：
+
+.. code:: text
+
+    x cannot be zero
+    program completed
+
+当异常被抛出时，CLR会执行测试：
+
+当前try语句内的执行是否可以捕获异常？
+
+-  如果可以，执行会被传递给兼容的catch块。如果catch块成功执行，执行会继续移动到try语句之后的下一条语句上（如果存在finally块，则会首先执行finally块）
+-  如果不可以，执行会跳回到函数调用者，并且重复测试（在执行完封装语句的所有finally块之后）
+
+如果没有函数负责处理异常，则会向用户显示一个错误对话框，并且终止程序。
+
+catch子句
+~~~~~~~~~
+
+catch子句指定了捕获哪些类型的异常。这必须是System.Exception或是System.Exception的子类。
+
+捕获System.Exception会捕获所有可能的错误。当符合下列条件时会非常有用：
+
+-  我们的程序可以由特定的异常类型中恢复。
+-  我们计划重新抛出异常（也许是在日志之后）。
+-  我们的错误处理器是终止程序之前的最后尝试。
+
+然而更通常的情况是，为了避免必须处理我们的处理器没有预料到的条件（例如OutOfMemoryException），我们捕获特定的异常类型。
+
+我们可以通过多个catch子句处理多个异常（再一次强调，这个示例可以使用显式的参数检测而不是异常处理进行编写）：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Main (string[] args)
+      {
+        try
+        {
+          byte b = byte.Parse (args[0]);
+          Console.WriteLine (b);
+        }
+        catch (IndexOutOfRangeException ex)
+        {
+          Console.WriteLine ("Please provide at least one argument");
+        }
+        catch (FormatException ex)
+        {
+          Console.WriteLine ("That's not a number!");
+        }
+        catch (OverflowException ex)
+        {
+          Console.WriteLine ("You've given me more than a byte!");
+        }
+      }
+    }
+
+对于指定的异常只会执行一个catch子句。如果我们希望包含一个安全网来捕获更为普通的异常（例如System.Exception），我们必须将最特殊的异常放在前面。
+
+如果我们不希望访问异常的属性，异常可以在没有指定变量的情况下被捕获：
+
+.. code:: csharp
+
+    catch (StackOverflowException)   // no variable
+    {
+      ...
+    }
+
+而且我们可以同时忽略变量与类型（意味着所有的异常将会被捕获）：
+
+catch { ... }
+
+finally块
+~~~~~~~~~
+
+finally块总是会执行－无论异常是否被抛出，也无论try块是否运行结束。finally块通常用于清理代码。
+
+finally块的执行或者：
+
+-  在catch块完成之后
+-  由于跳转语句（例如return或goto）控制离开try块之后
+-  在try块结束之后
+
+finally块有助于为程序添加确定性。在下面的示例中，我们所打开的文件总是会被关闭，而无论：
+
+-  try块是否正常完成
+-  是否由于文件为空时的执行返回（EndOfStream）
+-  是否在读取文件时抛出IOException
+
+.. code:: csharp
+
+    static void ReadFile()
+    {
+      StreamReader reader = null;    // In System.IO namespace
+      try
+      {
+        reader = File.OpenText ("file.txt");
+        if (reader.EndOfStream) return;
+        Console.WriteLine (reader.ReadToEnd());
+      }
+      finally
+      {
+        if (reader != null) reader.Dispose();
+      }
+    }
+
+在这个示例中，我们通过在StreamReader上调用Dispose关闭文件。在finally块内的对象上调用Dispose是贯穿.NET框架的标准约定，并且在C#中通过using语句被显式支持。
+
+**using语句**
+
+许多类封装了非托管资源，例如文件句柄，图形句柄或是数据库连接。这些类实现了System.IDisposable，该接口定义了一个名为Dispose的无参数方法来清理这些资源。using语句为在finally块内的IDisposable对象上调用Dispose提供一种优雅的语法。
+
+下面的语句：
+
+.. code:: csharp
+
+    using (StreamReader reader = File.OpenText ("file.txt"))
+    {
+      ...
+    }
+
+等同于正下面的代码：
+
+.. code:: csharp
+
+    StreamReader reader = File.OpenText ("file.txt");
+    try
+    {
+      ...
+    }
+    finally
+    {
+      if (reader != null)
+       ((IDisposable)reader).Dispose();
+    }
+
+我们会在第12章更详细的讨论销毁模式。
+
+抛出异常
+~~~~~~~~
+
+异常可以由运行时或是在用户代码中抛出。在这个示例中，Display抛出System.ArgumentNullException：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Display (string name)
+      {
+        if (name == null)
+          throw new ArgumentNullException ("name");
+        Console.WriteLine (name);
+      }
+      static void Main()
+      {
+        try { Display (null); }
+        catch (ArgumentNullException ex)
+        {
+          Console.WriteLine ("Caught the exception");
+        }
+      }
+    }
+
+**重新抛出异常**
+
+我们可以像下面这样捕获并重新抛出异常：
+
+.. code:: csharp
+
+    try {  ...  }
+    catch (Exception ex)
+    {
+      // Log error
+      ...
+      throw;          // Rethrow same exception
+    }
+
+以这种方式重新抛出可以使得我们记录错误而不处理。也可以让我们收回预期之外异常的处理：
+
+.. code:: csharp
+
+    using System.Net;       // (See Chapter 14)
+    ...
+    string s = null;
+    using (WebClient wc = new WebClient())
+      try { s = wc.DownloadString ("http://www.albahari.com/nutshell/");  }
+      catch (WebException ex)
+      {
+        if (ex.Status == WebExceptionStatus.NameResolutionFailure)
+          Console.WriteLine ("Bad domain name");
+        else
+          throw;     // Can't handle other sorts of WebException, so rethrow
+      }
+
+另一种更为常见的应用场景是重新抛出更为特殊的异常。例如：
+
+.. code:: csharp
+
+    try
+    {
+      ... // Parse a DateTime from XML element data
+    }
+    catch (FormatException ex)
+    {
+      throw new XmlException ("Invalid DateTime", ex);
+    }
+
+重新抛出异常并不会影响异常的StackTrace属性。当重新抛出不同的异常时，我们可以将InnerException设置为原始异常，如果这样有助于调试。几乎所有的异常类型都提供了用于该目的的构造器。
+
+System.Exception的关键属性
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+System.Exception几个最重要的属性如下：
+
+StackTrace：表示异常源到catch块所调用的所有方法的字符串。
+Message：带有错误描述的字符串。
+InnerException：引起外层异常的内层异常。该内层异常本身也许还有其他的InnerException。
+
+常见的异常类型
+~~~~~~~~~~~~~~
+
+下面的异常类型在CLR与.NET框架之间广泛使用。我们可以亲自抛出这些异常，或是将其用作基类来派生自定义的异常类型：
+
+System.ArgumentException：当函数使用错误的参数调用时抛出。这通常意味着程序bug。
+
+System.ArgumentNullException：ArgumentException的子类，当函数参数为null时抛出。
+
+System.ArgumentOutOfRangeException：ArgumentException的子类，当参数过大或是过小时抛出。例如，当向仅期望正数值作为参数的函数传负数时会抛出该异常。
+
+System.InvalidOperationException：当对象的状态不适合于方法成功执行时抛出，而无论任何特定的参数值。例如读取未打开的文件或是由迭代器获取下一个元素，而底层已在迭代时被修改。
+
+System.NotSupportedException：抛出异常表明特定的功能并不被支持。例如在IsReadOnly返回true的集合上调用Add方法。
+
+System.NotImplementedException：抛出异常表明某个功能还没有被现。
+
+System.ObjectDisposedException：当调用函数所在的对象已被销毁时抛出。
+
+常见模式
+~~~~~~~~
+
+**TryXXX方法模式**
+
+当编写方法时，我们可以选择当发生错误时返回某种类型的失败代码或是抛出异常。通常，当错误位于正常的工作流之外时，或是我们认为直接调用时不能处理时，我们抛出异常。然而有时最好是同时向用户提供两种选择。这种模式的一个示例就是int类型，该类型定义了两个Parse方法版本：
+
+.. code:: csharp
+
+    public int Parse     (string input);
+    public bool TryParse (string input, out int returnValue);
+
+如果解析失败，Parse抛出异常；TryParse返回false。
+
+我们可以通过使得XXX方法调用TryXXX方法来实现这种模式，如下所示：
+
+.. code:: csharp
+
+    public return-type XXX (input-type input)
+    {
+      return-type returnValue;
+      if (!TryXXX (input, out returnValue))
+        throw new YYYException (...)
+      return returnValue;
+    }
+
+**原子模式**
+
+有些操作的原子性是必须的，或者完全成功，或者失败而不影响状态。当对象由于半完成操作的结果而进入不确定状态时，则该对象是不可用的。finally块可以用来编写原子操作。
+
+在下面的示例中，我们使用Accumulator类，该类有一个Add方法，可以将一个整数数组添加其域Total中。如果Total超出int的最大值，则Add方法会导致OverflowException。Add方法是原子的，或者成功更新Total，或者失败，并保持Total的之前值：
+
+.. code:: csharp
+
+    public return-type XXX (input-type input)
+    {
+      return-type returnValue;
+      if (!TryXXX (input, out returnValue))
+        throw new YYYException (...)
+      return returnValue;
+    }
+
+在Accumulator的实现中，Add方法的执行会影响Total域。然而，如果在方法调用期间出现错误，Total就会恢复到方法开始时的初始值。
+
+.. code:: csharp
+
+    public class Accumulator
+    {
+      public int Total { get; private set; }
+      public void Add (params int[] ints)
+      {
+        bool success = false;
+        int totalSnapshot = Total;
+        try
+        {
+          foreach (int i in ints)
+          {
+            checked { Total += i; }
+          }
+          success = true;
+        }
+        finally
+        {
+          if (! success)
+            Total = totalSnapshot;
+        }
+      }
+    }
+
+**异常的替代**
+
+类似于int.Parse，函数可以通过使用返回类型或参数的向调用函数发送错误代码的方法来通知失败。尽管这可以处理简单与可观测的失败，但是当扩展到所有的错误时就会变得非常麻烦。而且这种方式也不可以扩展到非方法的函数，如操作或是属性。一个替代方法就是将错误代码放在一个共同的位置，从而调用堆栈中的所有函数都可以访问。尽管这种方式要求所有的函数都要参与到笨重的错误传播模式中，具有讽刺意味的是，其本身是倾向于错误的。
+
+枚举与迭代器
+------------
+
+枚举
+~~~~
+
+枚举器是一系列值上的只读、前向光标。枚举器是一个实现了下列接口之一的对象：
+
+-  System.Collections.IEnumerator
+-  System.Collections.Generic.IEnumerator
+
+foreach语句在一个迭代器对象上进行迭代。一个可迭代对象是一个序列的逻辑表示。他本身并不是一个光标，而是在其自身上生成光标的对象。一个可迭代的对象或者：
+
+-  实现了IEnumerable或IEnumerable
+-  有一个返回迭代器的名为GetEnumerator的方法
+
+迭代模式如下：
+
+.. code:: csharp
+
+    class Enumerator   // Typically implements IEnumerator or IEnumerator<T>
+    {
+      public IteratorVariableType Current { get {...} }
+      public bool MoveNext() {...}
+    }
+
+    class Enumerable   // Typically implements IEnumerable or IEnumerable<T>
+    {
+      public Enumerator GetEnumerator() {...}
+    }
+
+下面是使用foreach语句在单词beer中的字符上执行高级迭代的方式：
+
+.. code:: csharp
+
+    foreach (char c in "beer")
+      Console.WriteLine (c);
+
+下面是不使用foreach语句在beer的字符上执行迭代的低级方式：
+
+.. code:: csharp
+
+    using (var enumerator = "beer".GetEnumerator())
+      while (enumerator.MoveNext())
+      {
+        var element = enumerator.Current;
+        Console.WriteLine (element);
+      }
+
+如果迭代器实现了IDisposable，foreach语句同时扮演了using语句的角色，隐式销毁枚举器对象，就如同前面的例子一样。
+
+集合初始化器
+~~~~~~~~~~~~
+
+我们可以一步实例化并装填可枚举对象。例如：
+
+.. code:: csharp
+
+    using System.Collections.Generic;
+    ...
+    List<int> list = new List<int> {1, 2, 3};
+
+编译器将其翻译为如下代码：
+
+.. code:: csharp
+
+    using System.Collections.Generic;
+    ...
+    List<int> list = new List<int>();
+    list.Add (1);
+    list.Add (2);
+    list.Add (3);
+
+这要求可枚举对象实现System.Collections.IEnumerable接口，并且拥有一个相应数目的参数用于调用的Add方法。
+
+迭代器
+~~~~~~
+
+如果foreach语句是枚举器的消费者，那么迭代器就是枚举器的生产者。在下面的示例中，我们使用一个枚举器来返回一个Fibonacci数字序列：
+
+.. code:: csharp
+
+    using System;
+    using System.Collections.Generic;
+    class Test
+    {
+      static void Main()
+      {
+        foreach (int fib in Fibs(6))
+          Console.Write (fib + "  ");
+      }
+      static IEnumerable<int> Fibs (int fibCount)
+      {
+        for (int i = 0, prevFib = 1, curFib = 1; i < fibCount; i++)
+        {
+          yield return prevFib;
+          int newFib = prevFib+curFib;
+          prevFib = curFib;
+          curFib = newFib;
+        }
+      }
+    }
+
+输出结果为
+
+1 1 2 3 5 8
+
+其中return语句表示“这是你要求我由该方法返回的值”，yield
+return语句表示“这是你要求我由该枚举器获得的下一个元素”。在每次执行yeild语句时，控制权返回给调用者，但是调用的状态依然被维护，所以一旦调用者枚举下一个元素，方法就可以继续执行。状态的生命周期被绑定到枚举器，从而当调用者完成枚举时，状态不可以被释放。
+
+迭代器语义
+~~~~~~~~~~
+
+迭代器是一个包含一个或是多个yield语句的方法，属性或索引器。迭代器必须返回下列四个接口之一（否则，编译器会生成错误）：
+
+.. code:: csharp
+
+    // Enumerable interfaces
+    System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerable<T>
+    // Enumerator interfaces
+    System.Collections.IEnumerator
+    System.Collections.Generic.IEnumerator<T>
+
+依据是否返回一个可枚举的接口还是一个枚举器接口，迭代器具有不同的语义。我们会在第7章进行详细描述。
+
+多个yield语句也是可以的。例如：
+
+.. code:: csharp
+
+    class Test
+    {
+      static void Main()
+      {
+        foreach (string s in Foo())
+          Console.WriteLine(s);         // Prints "One","Two","Three"
+      }
+      static IEnumerable<string> Foo()
+      {
+        yield return "One";
+        yield return "Two";
+        yield return "Three";
+      }
+    }
+
+**yield break**
+
+yield
+break语句表示迭代器块应尽早结束，而不返回更多的元素。我们可以将Foo进行如下修改进行演示：
+
+.. code:: csharp
+
+    static IEnumerable<string> Foo (bool breakEarly)
+    {
+      yield return "One";
+      yield return "Two";
+      if (breakEarly)
+        yield break;
+      yield return "Three";
+    }
+
+注意：在迭代器块中return语句是非法的－我们必须使用yield
+break语句进行代替。
+
+**迭代器与try/catch/finally块**
+
+yield return语句不能出现在具有catch子句的try块中：
+
+.. code:: csharp
+
+    IEnumerable<string> Foo()
+    {
+      try { yield return "One"; }    // Illegal
+      catch { ... }
+    }
+
+yield
+return也不能出现在catch或是finally块中。这些限制是由于编译器必须将迭代器翻译为具有MoveNext，Current与Dispose成员的普通类的事实造成的，而翻译异常处理块将会非常复杂。
+
+然而，我们可以在只有finally块的try块中yield：
+
+.. code:: csharp
+
+    IEnumerable<string> Foo()
+    {
+      try { yield return "One"; }    // OK
+      finally { ... }
+    }
+
+当消费枚举器到达序列的结尾或是被销毁时，finally块中的代码会执行。如果我们及早中断，foreach语句会隐式销毁枚举器，这对于消费枚举器是一种安全的方式。当显式处理枚举器时，没有销毁而及早结束枚举器，避开finally块，这是一个陷阱。我们可以通过将枚举器的使用显式包围在using语句中来避免这一风险：
+
+.. code:: csharp
+
+    string firstElement = null;
+    var sequence = Foo();
+    using (var enumerator = sequence.GetEnumerator())
+      if (enumerator.MoveNext())
+        firstElement = enumerator.Current;
+
+组合序列
+~~~~~~~~
+
+迭代器是高度可组合的。我们可以扩展我们的示例，这一次我们仅输出偶Fibonacci数字：
+
+.. code:: csharp
+
+    using System;
+    using System.Collections.Generic;
+    class Test
+    {
+      static void Main()
+      {
+        foreach (int fib in EvenNumbersOnly (Fibs(6)))
+          Console.WriteLine (fib);
+      }
+      static IEnumerable<int> Fibs (int fibCount)
+      {
+        for (int i = 0, prevFib = 1, curFib = 1; i < fibCount; i++)
+        {
+          yield return prevFib;
+          int newFib = prevFib+curFib;
+          prevFib = curFib;
+          curFib = newFib;
+        }
+      }
+      static IEnumerable<int> EvenNumbersOnly (IEnumerable<int> sequence)
+      {
+        foreach (int x in sequence)
+          if ((x % 2) == 0)
+            yield return x;
+      }
+    }
+
+每个元素直到最后时刻才会进行计算－当被MoveNext()操作请求时。图4－1显示了每次的数据请求与数据输出。
+
+.. figure:: csharp4_4.1.png
+   :alt: csharp4_4.1.png
+
+   csharp4\_4.1.png
+迭代器的组合性在LINQ非常有用；我们会在第8章再次讨论该主题。
+
+可空类型
+--------
+
+引用类型可以通过null引用来表示不存在的值。然而，值类型不能简单的表示空值。例如：
+
+.. code:: csharp
+
+    string s = null;       // OK, Reference Type
+    int i = null;          // Compile Error, Value Type cannot be null
+
+要在值类型中表示null，我们必须使用一个被称之为可空类型的特殊构建。可空类型是由值类型后跟？符号来表示的：
+
+.. code:: csharp
+
+    int? i = null;                     // OK, Nullable Type
+    Console.WriteLine (i == null);     // True
+
+Nullable Struct
+~~~~~~~~~~~~~~~
+
+T?翻译为System.Nullable。Nullable是一个轻量级的不可修改的结构，只有两个域，来表示Value与HasValue。System.Nullable的实质非常简单：
+
+.. code:: csharp
+
+    public struct Nullable<T> where T : struct
+    {
+      public T Value {get;}
+      public bool HasValue {get;}
+      public T GetValueOrDefault();
+      public T GetValueOrDefault (T defaultValue);
+      ...
+    }
+
+代码：
+
+.. code:: csharp
+
+    int? i = null;
+    Console.WriteLine (i == null);              // True
+
+翻译为：
+
+.. code:: csharp
+
+    Nullable<int> i = new Nullable<int>();
+    Console.WriteLine (! i.HasValue);           // True
+
+当HasValue为假时尝试获取Value会抛出InvalidOperationException。如果HasValue为真，GetValueOrDefault()会返回Value；否则，他会返回new
+T()或是指定的自定义值。
+
+T?的默认值为null。
+
+隐式与显示的可空转换
+~~~~~~~~~~~~~~~~~~~~
+
+T到T?的转换是隐式的，而由T?到T的转换是显示的。例如：
+
+.. code:: csharp
+
+    int? x = 5;        // implicit
+    int y = (int)x;    // explicit
+
+显示转换直接等同于调用可空对象的Value属性。所以，如果HasValue为假，则会抛出InvalidOperationException。
+
+装箱与拆箱可空类型
+~~~~~~~~~~~~~~~~~~
+
+当T?被装箱时，堆上的已装箱时包含T，而不是T?。这种优化是可行的，因为一个装箱时值已经是一个表示空的引用类型。
+
+C#也许使用as操作的可空类型的拆箱。如果转换失败，结果为null：
+
+.. code:: csharp
+
+    object o = "string";
+    int? x = o as int?;
+    Console.WriteLine (x.HasValue);   // False
+
+操作符提升
+~~~~~~~~~~
+
+Nullable结构并没有定义如<，>，甚至==这样的操作符。尽管如此，下面的代码会正确的编译与运行：
+
+.. code:: csharp
+
+    int? x = 5;
+    int? y = 10;
+    bool b = x < y;      // true
+
+之所以能够起作用，是因为编译器由底层值类型借或是“提升”了小于操作符。类似的，他前面的比较表达式翻译为：
+
+.. code:: csharp
+
+    bool b = (x.HasValue && y.HasValue) ? (x.Value < y.Value) : false;
+
+换句话说，如果x与y同时拥有值，他会使用int的小于操作符进行比较，否则会返回false。
+
+操作符提升意味着我们可以在T?上使用T的操作符。为了提供特殊目的的空行为，我们可以为T?定义操作符，但是在大多数情况下，最后是依赖编译器自动为我们应用的语义可空逻辑。如下面的示例：
+
+.. code:: csharp
+
+    int? x = 5;
+    int? y = null;
+    // Equality operator examples
+    Console.WriteLine (x == y);    // False
+    Console.WriteLine (x == null); // False
+    Console.WriteLine (x == 5);    // True
+    Console.WriteLine (y == null); // True
+    Console.WriteLine (y == 5);    // False
+    Console.WriteLine (y != 5);    // True
+    // Relational operator examples
+    Console.WriteLine (x < 6);     // True
+    Console.WriteLine (y < 6);     // False
+    Console.WriteLine (y > 6);     // False
+    // All other operator examples
+    Console.WriteLine (x + 5);     // 10
+    Console.WriteLine (x + y);     // null (prints empty line)
+
+编译器会依据操作的类别执行不同的空逻辑。下面的章节会解释这些不同的规则。
+
+**相等操作符（==与!=）**
+
+提升的相等操作符像引用类型那样处理空值。这意味着两个空值是相等的：
+
+.. code:: csharp
+
+    Console.WriteLine (       null ==        null);   // True
+    Console.WriteLine ((bool?)null == (bool?)null);   // True
+
+而且：
+
+-  如果一个操作数为null，则两个操作数不相等。
+-  如查两个操作均不为null，则其Value会进行比较。
+
+**关系操作符（<,<=,>=,>）**
+
+关系操作符的作用原则是：比较空操作数是无意义的。这意味着将空值与另一个空值或是非空值进行比较都会返回false。
+
+.. code:: csharp
+
+    bool b = x < y;    // Translation:
+    bool b = (x.HasValue && y.HasValue) ? (x.Value < y.Value) : false;
+    // b is false (assuming x is 5 and y is null)
+
+**所有其他操作符（+,-,\*,/,%,&,\|,^,<<,>>,+,++,--,!,~）**
+
+当任意一个操作数为空时这些操作符都会返回空。这种模式对于SQL用户会比较熟悉：
+
+.. code:: csharp
+
+    int? c = x + y;   // Translation:
+    int? c = (x.HasValue && y.HasValue)
+             ? (int?) (x.Value + y.Value)
+             : null;
+    // c is null (assuming x is 5 and y is null)
+
+其中的一个例外就是当在bool?上应用&与\|操作符时，我们会稍后进行讨论。
+
+**混合可空与非可空操作符**
+
+我们可以混合并匹配可空与非可空的类型（之所以如此是因为存在由T到T?的隐式转换）：
+
+.. code:: csharp
+
+    int? a = null;
+    int b = 2;
+    int? c = a + b;   // c is null - equivalent to a + (int?)b
+
+bool?与&和\|操作符
+~~~~~~~~~~~~~~~~~~
+
+当提供bool?类型的操作数时，&与\|操作符会被看作未知值。所以，null \|
+true为真，因为：
+
+-  如果未知值为假，则结果为真。
+-  如果未知值为真，则结果为真。
+
+类似的，null &
+false为假。这一行为对于SQL用户也许会很熟悉。下面的示例枚举了其他的组合：
+
+.. code:: csharp
+
+    bool? n = null;
+    bool? f = false;
+    bool? t = true;
+    Console.WriteLine (n | n);    // (null)
+    Console.WriteLine (n | f);    // (null)
+    Console.WriteLine (n | t);    // True
+    Console.WriteLine (n & n);    // (null)
+    Console.WriteLine (n & f);    // False
+    Console.WriteLine (n & t);    // (null)
+
+空（Null）接合操作符
+~~~~~~~~~~~~~~~~~~~~
+
+??操作符是空接合操作符，而且可以同时用于可空类型与引用类型。他所表达的含义是“如果操作数非空，将其传递给我；否则，传递给我默认值。”例如：
+
+.. code:: csharp
+
+    int? x = null;
+    int y = x ?? 5;        // y is 5
+    int? a = null, b = 1, c = 2;
+    Console.WriteLine (a ?? b ?? c);  // 1 (first non-null value)
+
+??操作符等同于使用显式默认值调用GetValueOrDefault方法，所不同的是如果变量非空，则默认值的表达式就不会进行计算。
+
+可空类型的应用场景
+~~~~~~~~~~~~~~~~~~
+
+可空类型最常见的一个应用场景就是表示未知的值。我们经常会在数据库编程中遇到，其中一个类被映射到一个具有可空列的数据表。如果这些列是字符串，则没有问题，因为在CLR中字符串是引用类型，可以为空。然而，大多数其他的SQL列类型映射到CLR结构类型，从而使得当将SQL映射到CLR时可空类型非常有用。例如：
+
+.. code:: csharp
+
+    // Maps to a Customer table in a database
+    public class Customer
+    {
+      ...
+      public decimal? AccountBalance;
+    }
+
+可空类型也可以用于表示有时被称作环境属性的后端域。环境属性如果为空则会返回其父亲的值。例如：
+
+.. code:: csharp
+
+    public class Row
+    {
+      ...
+      Grid parent;
+      Color? color;
+      public Color Color
+      {
+        get { return color ?? parent.Color; }
+        set { color = value == parent.Color ? (Color?)null : value; }
+      }
+    }
+
+可空类型的替代品
+~~~~~~~~~~~~~~~~
+
+在可空类型成为C#语言的一部分之前，有许多策略来处理可空的值类型，由于历史原因其中的一些示例依然出现在.NET框架中。其中一个策略是指定一个特定的非空值为空值；例如字符串与数组。String.IndexOf方法会在没有查找字符时返回魔数-1：
+
+.. code:: csharp
+
+    int i = "Pink".IndexOf ('b');
+    Console.WriteLine (i);         // ?1
+
+然而，Array.IndexOf方法只有数据以0为起始索引时才会返回-1。更为通用的公式是IndexOf方法会返回比数组的最小边界小1的值。在下面的示例中，如果没有找到元素，则IndexOf方法会返回0：
+
+.. code:: csharp
+
+    Array a = Array.CreateInstance (typeof (string),
+                                    new int[] {2}, new int[] {1});
+    a.SetValue ("a", 1);
+    a.SetValue ("b", 2);
+    Console.WriteLine (Array.IndexOf (a, "c"));  // 0
+
+指定一个“魔数”存在一系问题，原因如下：
+
+-  他意味着每一个值类型具有不同的空值表示。相对应的，可空类型为所有的值类型提供了通用的模式。
+-  也许并没有合理的特定值。前面示例中的-1也许并不会总适用。对于我们前面表示一个未知帐户的示例同样适用。
+-  忘记测试魔数也许会导致不正确的值，而该不正确的值直到稍后运行时才会注意到。忘记测试空值上的HasValue值会抛出InvalidOperationException。
+-  值为空的能力并没有在类型中捕获。类型交互程序的意图，允许编译器检测正确性，并且通过编译器强制一致的规则集合。
+
+操作符重载
+----------
+
+操作符可以被重载来为自定义类型提供更为自然的语法。操作符重载特殊适用于表示非常基础的数据类型的自定义结构。例如，自定义的数值类型是进行操作符重载的理想选择。
+
+下面的符号操作符可以进行重载：
+
+.. code:: csharp
+
+    + (unary) ? (unary) ! ? ++
+    ?? + ? * /
+    % & | ^ <<
+    >> == != > <
+    >= <=      
+
+下列的操作符也可以进行重载：
+
+-  隐式与显式转换（使用implicit与explicit关键字）
+-  true与false
+
+下列操作符可以进行间接重载：
+
+-  组合赋值操作符（例如，+=，/=）被重写的非组合
+   操作符进行隐式重载（例如，+，/）。
+-  条件操作符&&与\|\|被重写的位操作符&与\|进行隐式重载。
+
+操作符函数
+~~~~~~~~~~
+
+操作符是通过声明一个操作符函数来进行重载的。操作符函数具有下列规则：
+
+-  函数名是由operator关键字后跟操作符符号来指定的。
+-  操作符函数必须被标记为static与public。
+-  操作符函数的参数表示操作数。
+-  操作符函数的结果表示表达式的结果。
+-  至少有一个操作符必须为在其中声明操作符函数的类型。
+
+在下面的示例中，我们定义一个名为Note的结构表示音乐笔记，然后重载+操作符：
+
+.. code:: csharp
+
+    public struct Note
+    {
+      int value;
+      public Note (int semitonesFromA) { value = semitonesFromA; }
+      public static Note operator + (Note x, int semitones)
+      {
+        return new Note (x.value + semitones);
+      }
+    }
+
+重载可以使得我们将int添加到Note：
+
+.. code:: csharp
+
+    Note B = new Note (2);
+    Note CSharp = B + 2;
+
+重载赋值操作符会自动支持相应的结合赋值操作符。在我们的示例中，因为我们重载了+，我们也可以使用+=：
+
+CSharp += 2;
+
+重载相等与比较操作符
+~~~~~~~~~~~~~~~~~~~~
+
+相等与比较操作符会在编写结构，而很少在编写类时进行重载。重载相等与比较操作符具有特殊的规则与职责，我们会在第6章中进行解释。
+
+这些规则总结如下：
+
+-  成对：C#编译器强制逻辑对操作符同时被定义。这些操作符是(== !=)，(<
+   >)与(<= >=)。
+-  Equals与GetHashCode：在大多数情况下，如果我们重载了（==）与（!=）,为了获得有意义的行为，我们将会需要重载定义在object上的Equals与GetHashCode方法。如果我们没有这样做，C#编译器会给出警告。
+-  IComparable与IComparable：如果我们重载了（< >）与（<=
+   >=），我们应实现IComparable与IComparable。
+
+自定义隐式与显式转换
+~~~~~~~~~~~~~~~~~~~~
+
+隐式与显式转换是可重载的操作符。这些转换通常被重载从而使得强相关类型之间的转换（例如数值类型）一致与自然。
+
+要在弱相关类型之间进行转换，下面的策略更为适用：
+
+-  编写一个带有要转换类型作为参数的构造函数。
+-  编写ToXXX与（静态）FromXXX方法在类型之间进行转换。
+
+正如在类型讨论中所解释的，隐式转换背后的基本原理是在转换过程中他们可以保证成功且不丢失信息。相对应的，显式转换应要求或者运行确定转换是否成功或者转换过程中信息是否丢失。
+
+在下面的示例中，我们在音乐Note类型与double类型之间定义转换：
+
+.. code:: csharp
+
+    ...
+    // Convert to hertz
+    public static implicit operator double (Note x)
+    {
+      return 440 * Math.Pow (2, (double) x.value / 12 );
+    }
+    // Convert from hertz (accurate to the nearest semitone)
+    public static explicit operator Note (double x)
+    {
+      return new Note ((int) (0.5 + 12 * (Math.Log (x/440) / Math.Log(2) ) ));
+    }
+    ...
+    Note n = (Note)554.37;  // explicit conversion
+    double x = n;           // implicit conversion
+
+重载true与false
+~~~~~~~~~~~~~~~
+
+true与false操作符仅在实质上为布尔类型，但是并没有到bool转换的情况中。一个示例便是实现三态逻辑的类型：通过重载true与false，这样的类型可以无缝的处理条件语句与操作符-也就是if，do，while，for，&&，\|\|，?:。System.Data.SqlTypes.SqlBoolean结构提供了这种功能。例如：
+
+.. code:: csharp
+
+    SqlBoolean a = SqlBoolean.Null;
+    if (a)
+      Console.WriteLine ("True");
+    else if (!a)
+      Console.WriteLine ("False");
+    else
+      Console.WriteLine ("Null");
+    OUTPUT:
+    Null
+
+下面的代码是演示true与false操作符所必须的SqlBoolean部分的重新实现：
+
+.. code:: csharp
+
+    public struct SqlBoolean
+    {
+      public static bool operator true (SqlBoolean x)
+      {
+        return x.m_value == True.m_value;
+      }
+      public static bool operator false (SqlBoolean x)
+      {
+        return x.m_value == False.m_value;
+      }
+      public static SqlBoolean operator ! (SqlBoolean x)
+      {
+        if (x.m_value == Null.m_value)  return Null;
+        if (x.m_value == False.m_value) return True;
+        return False;
+      }
+      public static readonly SqlBoolean Null =  new SqlBoolean(0);
+      public static readonly SqlBoolean False = new SqlBoolean(1);
+      public static readonly SqlBoolean True =  new SqlBoolean(2);
+      private SqlBoolean (byte value) { m_value = value; }
+      private byte m_value;
+    }
+
+扩展方法
+--------
+
+扩展方法可以使得一个已存在的类型使用新方法进行扩展，而无需修改原始类型的定义。扩展方法就是静态类的静态方法，其中this修饰符用于第一个参数。第一个参数的类型将是要扩展的类型。例如：
+
+.. code:: csharp
+
+    public static class StringHelper
+    {
+      public static bool IsCapitalized (this string s)
+      {
+        if (string.IsNullOrEmpty(s)) return false;
+        return char.IsUpper (s[0]);
+      }
+    }
+
+IsCapitialized扩展方法可以像在字符串上调用实例方法一样进行调用，例如：
+
+.. code:: csharp
+
+    Console.WriteLine ("Perth".IsCapitalized());
+
+当编译时，扩展方法将会翻译回普通的静态方法调用：
+
+Console.WriteLine (StringHelper.IsCapitalized ("Perth"));
+
+类似的翻译同样适用于：
+
+.. code:: csharp
+
+    arg0.Method (arg1, arg2, ...);              // Extension method call
+    StaticClass.Method (arg0, arg1, arg2, ...); // Static method call
+
+接口也可以进行扩展：
+
+.. code:: csharp
+
+    public static T First<T> (this IEnumerable<T> sequence)
+    {
+      foreach (T element in sequence)
+        return element;
+      throw new InvalidOperationException ("No elements!");
+    }
+    ...
+    Console.WriteLine ("Seattle".First());   // S
+
+扩展方法是在C#3.0中被加入的。
+
+扩展方法链
+~~~~~~~~~~
+
+类似于实例方法，扩展方法提供了一个简便的方法来形成函数链。考虑下面的两个函数：
+
+.. code:: csharp
+
+    public static class StringHelper
+    {
+      public static string Pluralize (this string s) {...}
+      public static string Capitalize (this string s) {...}
+    }
+
+x与y是相同的，且都被计算为"Sausages"，但是x使用扩展方法，而y使用静态方法：
+
+.. code:: csharp
+
+    string x = "sausage".Pluralize().Capitalize();
+    string y = StringHelper.Capitalize (StringHelper.Pluralize ("sausage"));
+
+不明确与解析
+~~~~~~~~~~~~
+
+**名字空间**
+
+扩展方法只当其类位于作用域中也可以被访问，通常是使用被引入的名字空间。考虑下面示例中的IsCapitialized扩展方法：
+
+.. code:: csharp
+
+    using System;
+    namespace Utils
+    {
+      public static class StringHelper
+      {
+        public static bool IsCapitalized (this string s)
+        {
+          if (string.IsNullOrEmpty(s)) return false;
+          return char.IsUpper (s[0]);
+        }
+      }
+    }
+
+要使用IsCapitialized，为了避免编译时错误，下面的程序必须引入Utils：
+
+.. code:: csharp
+
+    namespace MyApp
+    {
+      using Utils;
+      class Test
+      {
+        static void Main()
+        {
+          Console.WriteLine ("Perth".IsCapitalized());
+        }
+      }
+    }
+
+**扩展方法与实例方法**
+
+与扩展方法相比，任意兼容的实例方法具有较高的优先级。在下面的示例中，Test的Foo方法总是优先调用-即使使用int类型的参数x调用也是如此：
+
+.. code:: csharp
+
+    class Test
+    {
+      public void Foo (object x) { }    // This method always wins
+    }
+    static class Extensions
+    {
+      public static void Foo (this Test t, int x) { }
+    }
+
+在这种情况下，调用扩展方法的唯一方法就是通过普通的静态语法；换句话说，也就是Extensions.Foo(...)。
+
+**扩展方法与扩展方法**
+
+如果两个扩展方法具有相同的签名，为了避免方法调用的不确定性，扩展方法必须像普通的静态方法那样进行调用。然而，如果一个扩展方法具有更为特殊的参数，则更为特殊的方法具有较高的优先级。
+
+为了进行演示，考虑下面的两个类：
+
+.. code:: csharp
+
+    static class StringHelper
+    {
+      public static bool IsCapitalized (this string s) {...}
+    }
+    static class ObjectHelper
+    {
+      public static bool IsCapitalized (this object s) {...}
+    }
+
+下面的代码调用StringHelper的IsCapitialized方法：
+
+bool test1 = "Perth".IsCapitalized();
+
+要调用ObjectHelper的IsCapitialized方法，我们必须显式指定：
+
+bool test2 = (ObjectHelper.IsCapitalized ("Perth"));
+
+具体类型被认为比接口更为特殊。
+
+接口上的扩展方法
+~~~~~~~~~~~~~~~~
+
+扩展方法可以应用于接口：
+
+.. code:: csharp
+
+    using System;
+    using System.Collections.Generic;
+    static class Test
+    {
+      static void Main()
+      {
+        string[] strings = { "a", "b", null, "c"};
+        foreach (string s in strings.StripNulls())
+          Console.WriteLine (s);
+      }
+      static IEnumerable<T> StripNulls<T> (this IEnumerable<T> seq)
+      {
+        foreach (T t in seq)
+          if (t != null)
+            yield return t;
+      }
+    }
+
+匿名类型
+--------
+
+匿名类型是编译器即时创建来存储值集合的简单类。要创建一个匿名类，使用new关键字后跟对象初始化器，指定类型将要包含的属性与值。例如：
+
+var dude = new { Name = "Bob", Age = 23 };
+
+编译器会将其翻译为如下代码：
+
+.. code:: csharp
+
+    internal class AnonymousGeneratedTypeName
+    {
+      private string name;  // Actual field name is irrelevant
+      private int    age;   // Actual field name is irrelevant
+      public AnonymousGeneratedTypeName (string name, int age)
+      {
+        this.name = name; this.age = age;
+      }
+      public string  Name { get { return name; } }
+      public int     Age  { get { return age;  } }
+      // The Equals and GetHashCode methods are overridden (see Chapter 6).
+      // The ToString method is also overridden.
+    }
+    ...
+    var dude = new AnonymousGeneratedTypeName ("Bob", 23);
+
+我们必须使用var关键字来引用匿名类型，因为他并没有名字。
+
+匿名类型的属性可以由标签符本身的表达式进行推断。例如：
+
+.. code:: csharp
+
+    int Age = 23;
+    var dude = new { Name = "Bob", Age, Age.ToString().Length };
+
+等同于：
+
+var dude = new { Name = "Bob", Age = Age, Length = Age.ToString().Length
+};
+
+如果在相同的程序集内部声明的两个匿名类型实例，如果其元素的命名与类型相同，则他们具有相同的底层类型：
+
+.. code:: csharp
+
+    var a1 = new { X = 2, Y = 4 };
+    var a2 = new { X = 2, Y = 4 };
+    Console.WriteLine (a1.GetType() == a2.GetType());   // True
+
+另外，Equals方法被重载来执行相等比较：
+
+.. code:: csharp
+
+    Console.WriteLine (a1 == a2);         // False
+    Console.WriteLine (a1.Equals (a2));   // True
+
+我们可以像下面这样创建匿名类型数组：
+
+.. code:: csharp
+
+    var dudes = new[]
+    {
+      new { Name = "Bob", Age = 30 },
+      new { Name = "Tom", Age = 40 }
+    };
+
+匿名类型主要用于LINQ查询中，并且是在C#3.0中加入的。
+
+动态绑定
+--------
+
+动态绑定将绑定-解析类型，成员与操作的过程-由编译时推迟到运行时。动态绑定对于对于在编译时我们知道存在特定的函数，成员或操作，但是编译器并不知道的情况十分有用。这通常发生在我们与动态语言（例如IronPython）或COM进行交互或是我们使用反射的场景中。
+
+动态类型是使用环境关键字dynamic进行声明的：
+
+.. code:: csharp
+
+    dynamic d = GetSomeObject();
+    d.Quack();
+
+动态类型告诉编译器不要紧张。我们期望d的运行时类型具有一个Quack方法。我们不能静态的证明。因为d是动态的，编译器将Quack绑定到d的过程推迟到运行时。要理解这意味着什么需要在静态绑定与动态绑定之间进行区分。
+
+静态绑定与动态绑定
+~~~~~~~~~~~~~~~~~~
+
+规范绑定的示例可以是当编译表达式时将名字映射到特定的函数。要编译下面的表达式，编译器需要找到名为Quack方法的实现：
+
+.. code:: csharp
+
+    d.Quack();
+
+让我们假定d的静态类型是Duck：
+
+.. code:: csharp
+
+    Duck d = ...
+    d.Quack();
+
+在最简单的情况下，编译器通过在Duck上查找名为Quack的无参数方法执行绑定。如果查找失败，编译器会将其搜索扩展到带有可选参数的方法，Duck的基类的方法，以及使用Duck作为其第一个参数的扩展方法。如果没有找到匹配的方法，我们就会得到编译时错误。无论最终的方法是什么，底线就是绑定是由编译器完成的，而且绑定最终依赖于静态已知的操作数类型（在这个例子中为d）。这使其成为静态绑定。
+
+现在我们将d的静态类型修改为object：
+
+.. code:: csharp
+
+    object d = ...
+    d.Quack();
+
+调用Quack会向我们给出错误错误，尽管在d中存储的值可以包含一个名为Quack的方法，编译器并不知道这一点，因为他所拥有的唯一信息就是变量的类型，在这个例子中为object。但是现在我们将d的静态类型修改为dynamic：
+
+.. code:: csharp
+
+    dynamic d = ...
+    d.Quack();
+
+dynamic类型类似于object-他们并没有关于类型的描述。区别在于前者可以使得我们在编译时并不知情的情况下进行使用。动态对象会依据其运行时类型在运行时进行绑定，而是不依赖其编译时类型。当编译器遇到一个动态绑定的表达式时（通常是包含dynamic类型值的表达式），他仅是打包表达式，从而绑定可以在稍后的运行时完成。
+
+在运行时，如果一个动态对象实现了IDynamicMetaObjectProvider，该接口可以用来执行绑定。如果没有，绑定几乎与编译器已知运态对象的运行时类型相同的方式完成。这两种相对的绑定方式就被称为自定义绑定与语言绑定。
+
+自定义绑定
+~~~~~~~~~~
+
+当动态对象实现了IDynamicMetaObjectProvider(IDMOP)时会发生自定义绑定。尽管我们可以在使用C#编写的类型上实现IDMOP，而且这样做也非常有用，但是更为通常的情况是我们必须由一个在DLR的.NET中实现的动态语言中获取IDMOP对象，例如IronPython或IronRuby。来自这些语言的对象通过直接控制在这些对象上执行的操作的含义的方式隐式实现IDMOP。
+
+我们将会在第20章中更详细的讨论自定义绑定器，但是现在我们将会编写一个简单的来演示该特性：
+
+.. code:: csharp
+
+    using System;
+    using System.Dynamic;
+    public class Test
+    {
+      static void Main()
+      {
+        dynamic d = new Duck();
+        d.Quack();                  // Quack method was called
+        d.Waddle();                 // Waddle method was called
+      }
+    }
+    public class Duck : DynamicObject
+    {
+      public override bool TryInvokeMember (
+        InvokeMemberBinder binder, object[] args, out object result)
+      {
+        Console.WriteLine (binder.Name + " method was called");
+        result = null;
+        return true;
+      }
+    }
+
+Duck类实际上并没有Quack方法。相反，他使用自定义绑定来解析所有的方法调用。
+
+语言绑定
+~~~~~~~~
+
+语言绑定发生在动态对象并没有实现IDynamicMetaObjectProvider的情况。当处理设计并不完美的类型或是继承.NET类型系统局限性的时候语言绑定十分有用（我们会在第20章探讨详细的应用场景）。当使用数值类型时的一个典型问题是他们并没有共同的接口。我们已了解方法可以动态绑定；对于操作同样如此：
+
+.. code:: csharp
+
+    static dynamic Mean (dynamic x, dynamic y)
+    {
+      return (x + y) / 2;
+    }
+    static void Main()
+    {
+      int x = 3, y = 4;
+      Console.WriteLine (Mean (x, y));
+    }
+
+这样做的好处很明显-我们并不需要为每一个数值类型处理重复的代码。然而，我们丢失了静态类型的安全性，我们将会遇到运行时异常而不是编译时错误的风险。
+
+通过设计，语言运行时绑定的行为尽可能像静态绑定一样简单，具有在编译时就已知的动态对象的运行时类型。在我们前面的示例中，如果我们硬编码Mean来处理int类型，我们程序的行为依然是相同的。静态与动态绑定之间最值得注意的区别就在于扩展方法。
+
+RuntimeBinderException
+~~~~~~~~~~~~~~~~~~~~~~
+
+如果一个方法绑定失败，则会抛出RuntimeBinderException。我们可以将其认为是运行时的编译时错误。
+
+.. code:: csharp
+
+    dynamic d = 5;
+    d.Hello();                  // throws RuntimeBinderException
+
+之所以抛出该异常是因为int类型并没有Hello方法。
+
+运行时的动态表示
+~~~~~~~~~~~~~~~~
+
+在dynamic与object对象之间存在深度的等同关系。运行时会将下面的表达式认为true：
+
+typeof (dynamic) == typeof (object)
+
+该原则同样适用于构建类型与数组类型：
+
+.. code:: csharp
+
+    typeof (List<dynamic>) == typeof (List<object>)
+    typeof (dynamic[]) == typeof (object[])
+
+类似于对象引用，动态引用可以指向任意类型的对象（除了指针类型）：
+
+.. code:: csharp
+
+    dynamic x = "hello";
+    Console.WriteLine (x.GetType().Name);  // String
+    x = 123;  // No error (despite same variable)
+    Console.WriteLine (x.GetType().Name);  // Int32
+
+由结构上来说，在对象引用与动态引用之间并没有区别。动态引用仅是简单的允许其所指对象上的动态操作。我们可以由object转换为dynamic来执行我们所希望的动态操作：
+
+.. code:: csharp
+
+    object o = new System.Text.StringBuilder();
+    dynamic d = o;
+    d.Append ("hello");
+    Console.WriteLine (o);   // hello
+
+动态转换
+~~~~~~~~
+
+dynamic可以隐式由其他类型转换或是转换为其他类型：
+
+.. code:: csharp
+
+    int i = 7;
+    dynamic d = i;
+    long j = d;        // No cast required (implicit conversion)
+
+为了使得转换能够成功，动态类型的运行时类型必须隐式可转换为目标静态类型。前面的示例之所以工作是因为int可以隐式转换为long。
+
+下面的示例会抛出RuntimeBinderException，因为int并不能隐式转换为short：
+
+.. code:: csharp
+
+    int i = 7;
+    dynamic d = i;
+    short j = d;      // throws RuntimeBinderException
+
+var与dynamic
+~~~~~~~~~~~~
+
+var与dynamic类型表面上相似，但是区别十分明显：
+
+var表明“让编译器推测类型”
+
+dynamic表明“让运行时推测类型”
+
+如下所示：
+
+.. code:: csharp
+
+    dynamic x = "hello";  // Static type is dynamic, runtime type is string
+    var y = "hello";      // Static type is string, runtime type is string
+    int i = x;            // Runtime error
+    int j = y;            // Compile-time error
+
+使用var声明的变量的静态类型可以为dynamic：
+
+.. code:: csharp
+
+    dynamic x = "hello";
+    var y = x;            // Static type of y is dynamic
+    int z = y;            // Runtime error
+
+动态表达式
+~~~~~~~~~~
+
+域，属性，方法，事件，构造器，索引器，操作符以及转换都可以被称之为动态的。
+
+尝试使用一个具有void返回类型的动态表达式的结果是被禁止的-就如同静态类型表达式。区别在于错误发生在运行时：
+
+.. code:: csharp
+
+    dynamic list = new List<int>();
+    var result = list.Add (5);         // RuntimeBinderException thrown
+
+调用动态操作数的表达式通常本身是动态的，因为缺少类型信息的影响是级联的：
+
+.. code:: csharp
+
+    dynamic x = 2;
+    var y = x * 3;       // Static type of y is dynamic
+
+对于该原则有一些明显的例外。首先将一个动态表达式转换为静态类型会导致一个静态表达式：
+
+.. code:: csharp
+
+    dynamic x = 2;
+    var y = (int)x;      // Static type of y is int
+
+其次，构造器调用总会得到静态表达式-即使使用动态参数进行调用。在这个示例中，x是静态类型StringBuilder：
+
+.. code:: csharp
+
+    dynamic capacity = 10;
+    var x = new System.Text.StringBuilder (capacity);
+
+另外，包含动态参数的表达式是静态的具有一些边界条件，包括向数组以及委托创建表达式传递一个索引。
+
+无动态接收者的动态调用
+~~~~~~~~~~~~~~~~~~~~~~
+
+正规的dynamic使用涉及到一个动态接收者。这意味着动态对象是动态函数调用接收者：
+
+.. code:: csharp
+
+    dynamic x = ...;
+    x.Foo();          // x is the receiver
+
+然而，我们也可以使用动态参数调用静态已知的函数。这样的调用服从动态重载解析，可以包括：
+
+-  静态方法
+-  实例构造器
+-  具有静态已知类型接收者上的实例方法。
+
+在下面的示例中，进行动态绑定的特定Foo依赖于动态参数的运行时类型：
+
+.. code:: csharp
+
+    class Program
+    {
+      static void Foo (int x)    { Console.WriteLine ("1"); }
+      static void Foo (string x) { Console.WriteLine ("2"); }
+      static void Main()
+      {
+        dynamic x = 5;
+        dynamic y = "watermelon";
+        Foo (x);                // 1
+        Foo (y);                // 2
+      }
+    }
+
+因为并没有涉及到动态接收者，编译就会静态执行一个基本测试来确认动态调用是否会成功。他会检测到存在一个带有正确名字与参数数目的函数。如果没有查找到相应的函数，我们就会得到编译时错误。例如：
+
+.. code:: csharp
+
+    class Program
+    {
+      static void Foo (int x)    { Console.WriteLine ("1"); }
+      static void Foo (string x) { Console.WriteLine ("2"); }
+      static void Main()
+      {
+        dynamic x = 5;
+        Foo (x, x);          // Compiler error - wrong number of parameters
+        Fook (x);            // Compiler error - no such method name
+      }
+    }
+
+动态表达式中的静态类型
+~~~~~~~~~~~~~~~~~~~~~~
+
+很明显，动态类型用在动态绑定中。然而静态类型也会用在-如果可能-动态绑定中则不是这样明显。考虑下面的示例：
+
+.. code:: csharp
+
+    class Program
+    {
+      static void Foo (object x, object y) { Console.WriteLine ("oo"); }
+      static void Foo (object x, string y) { Console.WriteLine ("os"); }
+      static void Foo (string x, object y) { Console.WriteLine ("so"); }
+      static void Foo (string x, string y) { Console.WriteLine ("ss"); }
+      static void Main()
+      {
+        object o = "hello";
+        dynamic d = "goodbye";
+        Foo (o, d);               // os
+      }
+    }
+
+Foo(o,d)调用是动态绑定的，因为其中一个参数d是dynamic。但是因为o是静态已知的，绑定-尽管动态发生-将会使用静态类型。在这个示例中，由于o的静态类型与d的运行时类型，重载解析将会选择Foo的第二个实现。换句话说，编译器是“尽可能静态”。
+
+不可调用的函数
+~~~~~~~~~~~~~~
+
+有一些函数是不能动态调用的。我们不能调用：
+
+-  扩展方法（通过扩展方法语法）
+-  接口上的成员，如果我们需要转换为该接口
+-  由子类所隐藏的基类成员
+
+理解为什么会这样对于理解动态绑定是十分有用的。
+
+动态绑定需要两方面信息：要调用的函数名，以及调用函数所在的对象。然而，三个不可调用场景中的每一个都涉及到只在编译时已知的额外类型。对于C#5.0，并没有动态指定这些额外类型的方法。
+
+当调用扩展方法时，额外类型是隐式的。这个额外类型就是扩展方法定义所在的静态类。在我们的源码中指定using指令，编译器会进行相应的查找。这会使得扩展方法成为仅是编译时概念，因为using指令会在编译时去除（在绑定过程中将单个名字映射为名字空间修饰的名字之后）。
+
+当通过接口调用成员时，我们通过隐式或是显式转换指定额外的类型。我们也许会在两个应用场景下执行这样的操作：当调用显式实现的接口成员以及当调用对于其他程序为interal的类型中的接口成员时。我们可以使用下面两个类型来演示前者：
+
+.. code:: csharp
+
+    interface IFoo   { void Test();        }
+    class Foo : IFoo { void IFoo.Test() {} }
+
+要调用Test方法，我们必须转换为IFoo接口。这通过静态类型很容易实现：
+
+.. code:: csharp
+
+    IFoo f = new Foo();   // Implicit cast to interface
+    f.Test();
+
+现在考虑动态类型的情况：
+
+.. code:: csharp
+
+    IFoo f = new Foo();
+    dynamic d = f;
+    d.Test();             // Exception thrown
+
+隐式转换告诉编译器将后续f上的成员调用绑定到IFoo而不是Foo，换句话说，通过IFoo接口的镜头来查看对象。然而，该镜头会在运行时丢失，所以DLR不能完成绑定。如下所示：
+
+.. code:: csharp
+
+    Console.WriteLine (f.GetType().Name);    // Foo
+
+类似的情形也出现在调用隐藏的基类成员时：我们必须通过转换或是base关键字来指定额外的类型-而这些额外的类型会在运行时丢失。
+
+属性（Attributes）
+------------------
+
+我们已经了解了带有修改的程序的属性代码元素的概念,例如virtual或ref。这些结构是语言内建的。属性是用于向代码元素（程序集，类型，成员，返回值，参数以及泛型类型参数）添加自定义信息的可扩展机制。这种可扩展性对于与类型系统深度集成的服务十分有用，而无需C#语言中的特殊关键字或结构。
+
+属性的一个良好应用场景就是序列化－将任意对象转换为特定格式或是由特定格式转换为任意对象的过程。在这个应用场景中，域上的属性可以指定C#的域表示与域的格式化表示之间的转换。
+
+属性类
+~~~~~~
+
+属性是通过由抽象类System.Attribute继承（直接或间接）的类所定义的。要将属性关联到代码元素，在代码元素之间在方括号中指定属性的类型名。例如，下面的代码将ObsoleteAttribute关联到Foo类：
+
+.. code:: csharp
+
+    [ObsoleteAttribute]
+    public class Foo {...}
+
+这个属性会由编译器所识别，并且如果被标记为obsolete的类型或成员被引用时会导致编译器警告。通过约定，所有的属性类型以单词Attribute结尾。C#会识别这一点，并且当关联属性时可以允许我们忽略后缀：
+
+.. code:: csharp
+
+    [Obsolete]
+    public class Foo {...}
+
+ObsoleteAttribute是声明在System名字空间中的类型，其声明如下：
+
+public sealed class ObsoleteAttribute : Attribute {...}
+
+C#语言与.NET框架包含大量的预定义属性。我们会在第19章中描述如何编写我们自己的属性。
+
+命名与位置属性参数
+~~~~~~~~~~~~~~~~~~
+
+属性可以带有参数。在下面的示例中，我们将XmlElementAttribute应到某个类。这些属性会告诉XML序列化器（位于System.Xml.Serialization中）一个对象如何表示为XML并且接受多个属性参数。下面的属性会将CustomerEntity类映射到名为Customer的XML元素上，属于http://oreilly.com
+名字空间：
+
+.. code:: csharp
+
+    [XmlElement ("Customer", Namespace="http://oreilly.com")]
+    public class CustomerEntity { ... }
+
+属性参数最终为两类之一：位置或命名。在前面的示例中，第一个参数是参数；第二个是命名参数。位置参数对应于属性类型的公开构造器的参数。命名参数对应于属性类型上的公开域或公开属性。
+
+当指定一个属性时，我们必须包含与属性构造器中的一个相对应的位置参数。命名参数是可选的。
+
+在第19章，我们会描述相应的可用参数类型与规则。
+
+属性目标
+~~~~~~~~
+
+隐式的，属性的目标是紧跟属性后面的代码元素，通常是一个类型或类型成员。然而我们也可以将属性关联到程序集。这需要我们显式指定属性的目标。
+
+下面是一个使用CLSCompliant属性来为整个程序集指定CLS兼容的示例：
+
+[assembly:CLSCompliant(true)]
+
+指定多个属性
+~~~~~~~~~~~~
+
+可以为单个代码元素指定多个属性。每一个属性可以位于同一个花括号对中（通过逗号分隔），也可以位于单独的花括号对中（或是两者的组合）。下面的三个示例在语义上是相同的：
+
+.. code:: csharp
+
+    [Serializable, Obsolete, CLSCompliant(false)]
+    public class Bar {...}
+    [Serializable] [Obsolete] [CLSCompliant(false)]
+    public class Bar {...}
+    [Serializable, Obsolete]
+    [CLSCompliant(false)]
+    public class Bar {...}
+
+不安全代码与指针
+----------------
+
+C#通过标记为unsafe的代码块内的指针并使用/unsafe编译选择支持直接的内在操作。指针类型对于与C
+API的交互非常有用，但也可以用于访问托管堆之外的内在或是由于性能原因。
+
+指针基础
+~~~~~~~~
+
+对于每一个值类型或是指针类型V，都有一个相对应的指针类型V\*。指针实例存储变量的地址。指针类型可以（不安全的）转换为任意其他的指针类型。主要的指针操作符有：
+
++----------+---------------------------------------------------------+
+| 操作符   | 含义                                                    |
++----------+---------------------------------------------------------+
+| &        | 地址操作符返回指向变量地址的指针                        |
++----------+---------------------------------------------------------+
+| \*       | 解引用操作符返回指针地址住的变量                        |
++----------+---------------------------------------------------------+
+| '->'     | 指向成员操作符是一个语法缩写，也就是x->y等同于(\*x).y   |
++----------+---------------------------------------------------------+
+
+不安全代码
+~~~~~~~~~~
+
+通过使用unsafe关键字标记类型，类型成员或是语句块，我们可以使用指针类型并且在作用域内的内存上执行C++风格的操作。下面是一个使用指针来快速处理位图的示例：
+
+.. code:: csharp
+
+    unsafe void BlueFilter (int[,] bitmap)
+    {
+      int length = bitmap.Length;
+      fixed (int* b = bitmap)
+      {
+        int* p = b;
+        for (int i = 0; i < length; i++)
+          *p++ &= 0xFF;
+      }
+    }
+
+不安全代码的运行速度要快于相对应的安全实现。在这个示例中，代码本可以要求一个带有数组索引与边界检测的嵌套循环。不安全的C#方法同时要快于调用外部C函数，因为并没有离开托管执行环境的开销。
+
+fixed语句
+~~~~~~~~~
+
+fixed语句用来固定某个托管对象，例如前面示例中的位图。在程序的执行过程中，会在堆上分配与释放多个对象。为了避免不必要的内存碎片，垃圾器会移动对象。如果对象的地址在引用时发生变化，则指向对象则是无用的，所以fixed语句通知垃圾收集器固定某个对象而不要移动。这也许会对运行时的效率产生影响，所以固定块应仅在需要时使用，并且避免在固定块内进行堆分配。
+
+在fixed语句内，我们可以获得一个指向任意值类型，值类型数组或是字符串的指针。在数组与字符串的情况下，指针实际上指向第一个元素，其也是一个值类型。
+
+在内联引用类型内声明的值类型要求引用类型是固定的，如下所示：
+
+.. code:: csharp
+
+    class Test
+    {
+      int x;
+      static void Main()
+      {
+        Test test = new Test();
+        unsafe
+        {
+           fixed (int* p = &test.x)   // Pins test
+           {
+             *p = 9;
+           }
+           System.Console.WriteLine (test.x);
+        }
+      }
+    }
+
+我们会在第25章中进一步讨论fixed语句。
+
+指向成员操作符
+~~~~~~~~~~~~~~
+
+除了&与\*操作符，C#同时提供了C++风格的->操作符，该操作符可以用在结构上：
+
+.. code:: csharp
+
+    struct Test
+    {
+      int x;
+      unsafe static void Main()
+      {
+        Test test = new Test();
+        Test* p = &test;
+        p->x = 9;
+        System.Console.WriteLine (test.x);
+      }
+    }
+
+数组
+~~~~
+
+**stackallow关键字**
+
+我们可以使用stackallow关键字显式在栈上进行内存分配。因为他是在栈上分配的，其生命周期被限制为方法的生命周期，就如同其他的局部变量。块可以使用[]操作符来索引内存：
+
+.. code:: csharp
+
+    int* a = stackalloc int [10];
+    for (int i = 0; i < 10; ++i)
+       Console.WriteLine (a[i]);   // Print raw memory
+
+**固定尺寸缓冲区**
+
+fixed关键字还有另一个用处，可以在结构内创建固定尺寸的缓冲区：
+
+.. code:: csharp
+
+    unsafe struct UnsafeUnicodeString
+    {
+      public short Length;
+      public fixed byte Buffer[30];   // Allocate block of 30 bytes
+    }
+    unsafe class UnsafeClass
+    {
+      UnsafeUnicodeString uus;
+      public UnsafeClass (string s)
+      {
+        uus.Length = (short)s.Length;
+        fixed (byte* p = uus.Buffer)
+          for (int i = 0; i < s.Length; i++)
+            p[i] = (byte) s[i];
+      }
+    }
+    class Test
+    {
+      static void Main() { new UnsafeClass ("Christian Troy"); }
+    }
+
+fixed关键字也可以用在固定包含缓冲区的堆上的对象（为UnsafeClass实例）。所以，fixed意味着两种不同的内容：尺寸固定与位置固定。这两者通常组合使用，因为固定尺寸的缓冲区一定位于固定的位置。
+
+void\*
+~~~~~~
+
+void指针（void\*）并没有对底层数据的类型进行任何假定，并且对于处理原始内存非常有用。任意的指针类型都可以隐式转换为void\*。void\*不能被解引用，并且不能在void指针上执行算术操作。
+
+例如：
+
+.. code:: csharp
+
+    class Test
+    {
+      unsafe static void Main()
+      {
+        short[ ] a = {1,1,2,3,5,8,13,21,34,55};
+          fixed (short* p = a)
+          {
+            //sizeof returns size of value-type in bytes
+            Zap (p, a.Length * sizeof (short));
+          }
+        foreach (short x in a)
+          System.Console.WriteLine (x);   // Prints all zeros
+      }
+      unsafe static void Zap (void* memory, int byteCount)
+      {
+        byte* b = (byte*) memory;
+          for (int i = 0; i < byteCount; i++)
+            *b++ = 0;
+      }
+    }
+
+指向非托管代码的指针
+~~~~~~~~~~~~~~~~~~~~
+
+指针对于访问托管堆外的数据（例如当与C
+DLL或是COM交互时），或是处理并没有位于主存中的数据（例如图像内存或是嵌入式设备上的存储介质）也十分有用。
+
+预处理器指令
+------------
+
+预处理器指令为编译器提供关于代码区域的额外信息。最常见的预处理器指令是条件指令，条件指令提供了一种方法由编译时包含或是排除代码区域。例如：
+
+.. code:: csharp
+
+    #define DEBUG
+    class MyClass
+    {
+      int x;
+      void Foo()
+      {
+        # if DEBUG
+        Console.WriteLine ("Testing: x = {0}", x);
+        # endif
+      }
+      ...
+    }
+
+在这个类中，Foo中语句的编译是与DEBUG符号是否存在条件相关的。如果我们移除DEBUG符号，则该语句不会被编译。预处器符号可以在一个源文件中进行定义，并且可以使用/define:symbol命令行选项将其传递给编译器。
+
+类似于#if与#elif指令，我们可以在多个符号上使用\|\|，&&，!操作符来执行或，与以及非操作。下面的指令会指示编译器如果TESTMODE符号被定义且DEBUG符号没有被定义时包含后面的代码：
+
+.. code:: csharp
+
+    #if TESTMODE && !DEBUG
+      ...
+
+然而要记住，我们并不是在构建普通的C#表达式，我们操作所依赖的符号与变量－静态或其他－并没有直接的关系。
+
+#error与#warning符号通过指定编译器在提供未需要的编译符号时生成警告或错误的方来避免条件指令的误用。表4－1列出了预处理器指令。
+
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| 预处理器指令                           | 动作                                                                                                        |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #define symbol                         | 定义symbol                                                                                                  |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #undef symbol                          | 取消symbol定义                                                                                              |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #if symobl [operator symbol2]...       | 测试操作符符号为==,!=, &&以及                                                                               | ,后跟#else，#elif以及#endif   |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #else                                  | 执行后续代码直到#endif                                                                                      |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #elif symobl [operator symbol2]...     | 组合#else分支与#if测试                                                                                      |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #endif                                 | 结束条件指令                                                                                                |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #warning text                          | 显示在编译输出中的警告文本                                                                                  |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #error text                            | 显示在编译输出中的错误文本                                                                                  |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #pragma warning [disable \| restore]   | 禁止/重新载入编译警告                                                                                       |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #line [number["file"] \| hidden]       | 指定源代中的行号；file是显示在计算机输出中的文件名；hidden指示调试器略过此处直到下一个#line指令之间的代码   |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #region name                           | 标记区域的开头                                                                                              |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+| #endregion                             | 结束区域                                                                                                    |
++----------------------------------------+-------------------------------------------------------------------------------------------------------------+-------------------------------+
+
+Table: Table 4-1. Preprocessor directives
+
+条件属性
+~~~~~~~~
+
+使用Conditional属性进行修饰的属性只在指定的预处理器符号存在时才编译。例如：
+
+.. code:: csharp
+
+    // file1.cs
+    #define DEBUG
+    using System;
+    using System.Diagnostics;
+    [Conditional("DEBUG")]
+    public class TestAttribute : Attribute {}
+    // file2.cs
+    #define DEBUG
+    [Test]
+    class Foo
+    {
+      [Test]
+      string s;
+    }
+
+只有当DEBUG符号位于file2.cs作用域内时编译器才会组合[Test]属性。
+
+Pragma警告
+~~~~~~~~~~
+
+当编译器在我们的代码中检测到某些看起来并非我们意图的代码时会生成警告。与错误不同，警告通常并不会阻止我们的程序进行编译。
+
+编译器警告在定位Bug时极其有价值。然而这种有用性在我们获得false警告会遭到破坏。在一个大的程序中，如果注意到“real”警告维护一个良好的信嘈比是十分必要的。
+
+正是由于这种影响，编译器允许我们使用#pragma
+warning指令来选择性的抑制警告。在这个示例中，我们指示编译器不要警告关于Message域未被使用的情况：
+
+.. code:: csharp
+
+    public class Foo
+    {
+      static void Main() { }
+      #pragma warning disable 414
+      static string Message = "Hello";
+      #pragma warning restore 414
+    }
+
+忽略#pragma warning指令中的数字将会是重新载入所有的警告代码。
+
+如果我们对于使用这种指令十分小心，我们可以使用/warnaserror开关来进行编译－这会告诉编译器将警告看作错误。
+
+XML文档
+-------
+
+文档注释是一段标识类型或成员的嵌入XML片段。文档注释出现在类型或是成员声明之，并且以三个斜线开头：
+
+.. code:: csharp
+
+    /// <summary>Cancels a running query.</summary>
+    public void Cancel() { ... }
+
+多行注释可以像下面这样编写：
+
+.. code:: csharp
+
+    /// <summary>
+    /// Cancels a running query
+    /// </summary>
+    public void Cancel() { ... }
+
+或者像下面这样（注意起始处的多余星号）：
+
+.. code:: csharp
+
+    /**
+        <summary> Cancels a running query. </summary>
+    */
+    public void Cancel() { ... }
+
+如果我们使用/doc指令进行编译，编译器会抽取并将这些文档注释组合为一个XML文件。这有两个主要用途：
+
+-  如果与已编译的程序集位于相同的目录，Visual
+   Studio会自动读取XML文件并使用这些信息来向相同名字的程序集的使用者提供智能成员列表。
+-  第三方工具（例如Sandcastle与NDoc）可以将XML文件转换为HTML帮助文件。
+
+标准XML文档标记
+~~~~~~~~~~~~~~~
+
+下面是Visual Studio与文档生成器可以识别的标准XML标记：
+
+...
+
+表示InteliSense为成员或类型所显示的工具提示。
+
+...
+
+描述类型或成员的其他文本。文档生成器会进行识别并将其合并到类型或成员的描述中。
+
+...
+
+解释方法中的参数。
+
+...
+
+解释方法的返回值。
+
+...
+
+列出方法也许会抛出的异常（cref指异常类型）。
+
+...
+
+指示为类型或成员生成文档所需要的IPermisson类型。
+
+.. raw:: html
+
+   <example>
+
+.. raw:: html
+
+   <example>
+
+...
+
+.. raw:: html
+
+   </example>
+

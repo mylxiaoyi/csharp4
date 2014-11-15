@@ -1,0 +1,223 @@
+Chapter 19. Dynamic Programming
+===============================
+
+在第4章中，我们解释了C#语言中的动态绑定的工作原理。在本章中，我们会简要了解DLR，然后会探讨下列的动态编程模式：
+
+-  数值类型统一
+-  动态成员重载解析
+-  实现动态对象
+-  与动态语言互操作
+
+本章中的类型位于System.Dynamic名字空间中，除了CallSite<>，其位于System.Runtime.CompilerServices。
+
+动态语言运行时
+--------------
+
+C#依赖动态语言运行时（DLR）来执行动态绑定。
+
+相对于其名字，DLR并不是CLR的动态版本。他是位于CLR之上的一个库，就如同System.Xml.dll等其他库。其主要角色就是提供运行时服务来统一动态编程－静态与动态类型语言。这意味着如C#，VB，IronPython与IronRuby都会使用共同的协议来动态调用函数，允许他们共享库并且调用以其他语言所编写的代码。
+
+DLR同时可以使得在.NET中编写新的动态语言相对更为容易。动态语言的作者是在表达式树的层次上进行工作，而不必接触IL。
+
+DLR进一步保证所有的消费者都会获得call-site缓存的好处，这是DLR避免不必要的重复的动态绑定中昂贵的成员解析所做的优化。
+
+**什么是Call Site?**
+
+当编译器遇到一个动态表达式时，他并不知道谁会在运行时计算该表达式。例如，考虑下面的方法：
+
+.. code:: csharp
+
+    public dynamic Foo (dynamic x, dynamic y)
+    {
+      return x / y;   // Dynamic expression
+    }
+
+x与y变量可以是任意的CLR对象，COM对象甚至可以是动态语言中的对象。所以编译并不能用其通常静态方法来调用已知类型的已知方法。相反，编译器会调用最终会导致描述操作，由DLR在运行时绑定的call
+site管理的表达式树。call site实际上扮演了调用者与被调用者之间的中介。
+
+一个call
+site是由Sytem.Core.dll中的CallSite<>类来表示的。我们可以通过反编译前面的方法来看到－结果类似于下面的代码：
+
+.. code:: csharp
+
+    static CallSite<Func<CallSite,object,object,object>> divideSite;
+    [return: Dynamic]
+    public object Foo ([Dynamic] object x, [Dynamic] object y)
+    {
+      if (divideSite == null)
+        divideSite =
+          CallSite<Func<CallSite,object,object,object>>.Create (
+            Microsoft.CSharp.RuntimeBinder.Binder.BinaryOperation (
+              CSharpBinderFlags.None,
+              ExpressionType.Divide,
+              /* Remaining arguments omitted for brevity */ ));
+      return divideSite.Target (divideSite, x, y);
+    }
+
+正如我们所看到的，call
+site会在静态域中进行缓存来避免每次调用重新调用的代价。DLR进一步缓存绑定阶段的结果与实际的方法目标。
+
+然后实际的动态调用通过调用site的Target并传递x与y操作数来实现。
+
+注意Binder类是特定于C#的。支持动态绑定的所有语言提供了语言特定的绑定器来帮助DLR以一种语言特定的方式解释表达式。例如，如果我们使用整数值5和2来调用Foo，C#绑定器会保证我们返回2。相对的，VB.NET绑定器将会返回2.5。
+
+数值类型统一
+------------
+
+我们会第4章中已经看到dynamic如何让我们编写一个跨越所有数值类型的方法：
+
+.. code:: csharp
+
+    static dynamic Mean (dynamic x, dynamic y)
+    {
+      return (x + y) / 2;
+    }
+    static void Main()
+    {
+      int x = 3, y = 5;
+      Console.WriteLine (Mean (x, y));
+    }
+
+然而这牺牲了静态类型安全。下面的语句编译时无错，但会在运行时出错：
+
+string s = Mean (3, 5); // Runtime error!
+
+我们可以通过引用一个泛型类型参数来修改这一问题，然后在计算本身内部转换为dynamic：
+
+.. code:: csharp
+
+    static T Mean<T> (T x, T y)
+    {
+      dynamic result = ((dynamic) x + y) / 2;
+      return (T) result;
+    }
+
+注意我们显式的将结果转换为T。如果我们忽略这一转换，我们就要依赖于隐式转换，也许最初看起来会是正确的。然而在使用8位或是16位整数类型调用方法时，隐式转换会在运行时失败。要理解为什么，考虑当我们将两个8位数相加时对普通的静态类型会发生什么：
+
+.. code:: csharp
+
+    byte b = 3;
+    Console.WriteLine ((b + b).GetType().Name);  // Int32
+
+我们会得到Int32，因为编译器会在执行算术操作之前将8位或是16位数值转换为Int32。为了一致性，C#绑定器会告诉DLR执行相同的操作，而我们就会得到一个需要显式转换为较小整数值类型的Int32。当然，如果我们相加而不是获取平均数也许就会有溢出的可能。
+
+动态绑定会导致一些小的性能影响－即使使用call-site缓存。我们可以通过添加一些仅覆盖最常用类型的静态重载形式来减少性能影响。例如，如果性能测试表明使用double调用Mean是一个性能瓶颈，我们可以添加下面的重载形式：
+
+.. code:: csharp
+
+    static double Mean (double x, double y)
+    {
+      return (x + y) / 2;
+    }
+
+当使用在编译时就已知为double类型的参数来调用Mean方法，编译器将会优先使用重载版本。
+
+动态成员重载解析
+----------------
+
+使用动态类型参数调用静态已知的方法会延迟由编译时到运行时的成员重载解析。这在简化特定编程任务时会非常有用－例如简化Visitor设计模式。同时他在解决C#的静态类型所用的限制方面也十分有用。
+
+简化Visitor模式
+~~~~~~~~~~~~~~~
+
+实际上，Visitor模式可以使得我们向类层次结构添加一个新方法而不修改已有的类。尽管十分有用，这种模式处于静态形式并且与其大多数设计模式比起来要简单得多。他同时要求被访问的类通过提供一个Accept方法而变得“对访问者友好”，如果类并不在我们的控制之下，那么是不可能的。
+
+通过动态绑定，我们可以更为容易的实现相同的目标－而且不需修改已存在的类。为了进行演示，考虑下面的类层次结构：
+
+.. code:: csharp
+
+    class Person
+    {
+      public string FirstName { get; set; }
+      public string LastName  { get; set; }
+      // The Friends collection may contain Customers & Employees:
+      public readonly IList<Person> Friends = new Collection<Person> ();
+    }
+    class Customer : Person { public decimal CreditLimit { get; set; } }
+    class Employee : Person { public decimal Salary      { get; set; } }
+
+假定我们希望编写一个方法将Person的详细内容导出为一个XML
+XElement。最显然的解决方案就是在Person类中编写一个名为ToXElement()的方法，返回一个使用Person属性填充的XElement。然后，我们可以在Customer与Employee类中重载该方法，从而使得XElement也可以使用CreditLimit与Salary进行填充。然而，这种模式是有问题的，主要由于两个原因：
+
+-  我们也许并不拥有Person，Customer与Employee类，从而向其中添加方法是不可能的。（并且扩展方法并不会提供多态行为）
+-  Person，Customer与Employee类也许已经非常庞大。例如Person已经包含了如此之多的功能从而变成了维护的噩梦。一个好的矫正方法就是避免向Person类添加并不需要访问Person私有状态的方法。ToXElement方法也许是一个很好的替代者。
+
+通过动态成员重载解析，我们可以在一个单独的类编写ToXElement功能，而无需依据类型进行切换：
+
+.. code:: csharp
+
+    class ToXElementPersonVisitor
+    {
+      public XElement DynamicVisit (Person p)
+      {
+        return Visit ((dynamic)p);
+      }
+      XElement Visit (Person p)
+      {
+        return new XElement ("Person",
+          new XAttribute ("Type", p.GetType().Name),
+          new XElement ("FirstName", p.FirstName),
+          new XElement ("LastName", p.LastName),
+          p.Friends.Select (f => DynamicVisit (f))
+        );
+      }
+      XElement Visit (Customer c)   // Specialized logic for customers
+      {
+        XElement xe = Visit ((Person)c);   // Call "base" method
+        xe.Add (new XElement ("CreditLimit", c.CreditLimit));
+        return xe;
+      }
+      XElement Visit (Employee e)   // Specialized logic for employees
+      {
+        XElement xe = Visit ((Person)e);   // Call "base" method
+        xe.Add (new XElement ("Salary", e.Salary));
+        return xe;
+      }
+    }
+
+DynamicVisit方法执行动态转发－在运行时调用Visit的最特定方法。注意粗体显示的代码行，其中我们在Friends集合中的每一个人上调用DynamicVisit。这可以保证如果一个朋友是Customer或Employee，正确的重载方法会被调用。
+
+我们可以使用如下的代码进行演示：
+
+.. code:: csharp
+
+    var cust = new Customer
+    {
+      FirstName = "Joe", LastName = "Bloggs", CreditLimit = 123
+    };
+    cust.Friends.Add (
+      new Employee { FirstName = "Sue", LastName = "Brown", Salary = 50000 }
+    );
+    Console.WriteLine (new ToXElementPersonVisitor().DynamicVisit (cust));
+
+输出结果如下：
+
+.. code:: csharp
+
+    <Person Type="Customer">
+      <FirstName>Joe</FirstName>
+      <LastName>Bloggs</LastName>
+      <Person Type="Employee">
+        <FirstName>Sue</FirstName>
+        <LastName>Brown</LastName>
+        <Salary>50000</Salary>
+      </Person>
+      <CreditLimit>123</CreditLimit>
+    </Person>
+
+**变体**
+
+如果我们计划多个访问者类，一个有用的变体可以为访问者定义抽象蕨类：
+
+.. code:: csharp
+
+    abstract class PersonVisitor<T>
+    {
+      public T DynamicVisit (Person p) { return Visit ((dynamic)p); }
+      protected abstract T Visit (Person p);
+      protected virtual T Visit (Customer c) { return Visit ((Person) c); }
+      protected virtual T Visit (Employee e) { return Visit ((Person) e); }
+    }
+
+这样子类就不需要定义其自己的DynamicVisit方法：他们所需要做的就是重载Visit版本来实现特定的行为。
+
